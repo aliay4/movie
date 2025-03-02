@@ -11,7 +11,8 @@ app.use(express.json());
 app.use(express.static('.'));
 
 // MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/movie-party';
+const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/movie-party';
+console.log('Trying to connect to MongoDB with URI:', MONGODB_URI);
 mongoose.connect(MONGODB_URI)
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('MongoDB connection error:', err));
