@@ -27,7 +27,7 @@ Film izleme partileri oluşturabileceğiniz ve arkadaşlarınızla birlikte senk
 
 1. Repoyu klonlayın:
    ```
-   git clone https://github.com/kullaniciadi/project-movie.git
+   git clone https://github.com/aliay4/movie.git
    cd project-movie
    ```
 
