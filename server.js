@@ -11,11 +11,28 @@ app.use(express.json());
 app.use(express.static('.'));
 
 // MongoDB connection
-const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/movie-party';
+console.log('Mevcut ortam değişkenleri:', {
+  MONGO_URI: process.env.MONGO_URI,
+  MONGODB_URI: process.env.MONGODB_URI
+});
+
+// Railway'de MongoDB bağlantı dizesini doğrudan ayarlama
+// NOT: Bu geçici bir çözümdür, güvenlik açısından ortam değişkenleri kullanmak daha iyidir
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 
+  // Aşağıdaki satırı Railway'deki MongoDB bağlantı dizesi ile değiştirin
+  'mongodb://localhost:27017/movie-party';
+
 console.log('Trying to connect to MongoDB with URI:', MONGODB_URI);
-mongoose.connect(MONGODB_URI)
-    .then(() => console.log('Connected to MongoDB'))
-    .catch(err => console.error('MongoDB connection error:', err));
+
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('Connected to MongoDB'))
+.catch(err => {
+  console.error('MongoDB connection error:', err);
+  console.error('Connection error details:', JSON.stringify(err, null, 2));
+});
 
 // Define schemas
 const partySchema = new mongoose.Schema({
