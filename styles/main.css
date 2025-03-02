@@ -1,0 +1,21 @@
+.video-container {
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.chat-container {
+    height: calc(100vh - 220px);
+    overflow-y: auto;
+}
+
+.chat-message {
+    border-radius: 8px;
+    margin: 8px 0;
+    padding: 8px 12px;
+}
+
+.join-container {
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+}
