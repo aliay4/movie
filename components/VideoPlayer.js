@@ -46,6 +46,23 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         };
     }, [partyCode]);
 
+    // Video olaylarını dinle
+    React.useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.addEventListener('play', handlePlay);
+            videoRef.current.addEventListener('pause', handlePause);
+            videoRef.current.addEventListener('seeking', handleSeeking);
+
+            return () => {
+                if (videoRef.current) {
+                    videoRef.current.removeEventListener('play', handlePlay);
+                    videoRef.current.removeEventListener('pause', handlePause);
+                    videoRef.current.removeEventListener('seeking', handleSeeking);
+                }
+            };
+        }
+    }, [videoRef.current, socket, isCreator]);
+
     React.useEffect(() => {
         // Parti bilgilerini periyodik olarak kontrol et
         const checkPartyUpdates = async () => {
@@ -174,7 +191,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             );
         }
 
-        if (videoType === 'local') {
+        if (videoType === 'local' || videoType === 'url') {
             return (
                 <div>
                     <video
@@ -182,15 +199,20 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
                         className="w-full h-full"
                         controls
                         crossOrigin="anonymous"
+                        onPlay={handlePlay}
+                        onPause={handlePause}
+                        onSeeking={handleSeeking}
                     >
                         <source src={videoUrl} type="video/mp4" />
                         Tarayıcınız video etiketini desteklemiyor.
                     </video>
-                    <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2">
-                        <p className="font-bold">Not:</p>
-                        <p>Bu yerel video sadece sizin tarayıcınızda görünecektir. Diğer katılımcılar göremeyecektir.</p>
-                        <p>Herkesin görebilmesi için bir video URL'si kullanmanız önerilir.</p>
-                    </div>
+                    {videoType === 'local' && (
+                        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2">
+                            <p className="font-bold">Not:</p>
+                            <p>Bu yerel video sadece sizin tarayıcınızda görünecektir. Diğer katılımcılar göremeyecektir.</p>
+                            <p>Herkesin görebilmesi için bir video URL'si kullanmanız önerilir.</p>
+                        </div>
+                    )}
                 </div>
             );
         }
