@@ -15,56 +15,74 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
     const onYouTubePlayerReady = React.useCallback((event) => {
         youtubePlayerRef.current = event.target;
 
-        if (isCreator) {
-            let lastTime = 0;
-            let isPlaying = false;
+        // Her iki taraf için de durum kontrolü yap
+        let lastTime = 0;
+        let lastState = null;
+        let syncInterval = null;
 
-            const checkState = setInterval(() => {
-                if (!youtubePlayerRef.current) {
-                    clearInterval(checkState);
-                    return;
-                }
+        const syncWithCreator = async () => {
+            if (!youtubePlayerRef.current) return;
 
-                try {
-                    const currentTime = youtubePlayerRef.current.getCurrentTime();
-                    const playerState = youtubePlayerRef.current.getPlayerState();
-                    const timeDiff = Math.abs(currentTime - lastTime);
+            try {
+                const currentTime = youtubePlayerRef.current.getCurrentTime();
+                const playerState = youtubePlayerRef.current.getPlayerState();
+                const timeDiff = Math.abs(currentTime - lastTime);
 
-                    // Durum değişikliklerini kontrol et
-                    if (playerState === YT.PlayerState.PLAYING && !isPlaying) {
-                        console.log('YouTube video play detected', currentTime);
-                        socket.emit('videoPlay', {
-                            partyCode,
-                            currentTime: currentTime
-                        });
-                        isPlaying = true;
-                    } else if (playerState === YT.PlayerState.PAUSED && isPlaying) {
-                        console.log('YouTube video pause detected', currentTime);
-                        socket.emit('videoPause', {
-                            partyCode,
-                            currentTime: currentTime
-                        });
-                        isPlaying = false;
+                // Yaratıcı için event gönderme
+                if (isCreator) {
+                    if (playerState !== lastState) {
+                        if (playerState === YT.PlayerState.PLAYING) {
+                            console.log('Creator: Video playing at', currentTime);
+                            socket.emit('videoPlay', {
+                                partyCode,
+                                currentTime: currentTime,
+                                timestamp: Date.now()
+                            });
+                        } else if (playerState === YT.PlayerState.PAUSED) {
+                            console.log('Creator: Video paused at', currentTime);
+                            socket.emit('videoPause', {
+                                partyCode,
+                                currentTime: currentTime,
+                                timestamp: Date.now()
+                            });
+                        }
+                        lastState = playerState;
                     }
 
-                    // Seek olaylarını kontrol et
-                    if (timeDiff > 2 && !isSeeking) {
-                        console.log('YouTube video seek detected', currentTime);
+                    if (timeDiff > 1) {
+                        console.log('Creator: Video seeked to', currentTime);
                         socket.emit('videoSeek', {
                             partyCode,
-                            currentTime: currentTime
+                            currentTime: currentTime,
+                            timestamp: Date.now()
                         });
                     }
-
-                    lastTime = currentTime;
-                } catch (error) {
-                    console.error('YouTube player state check error:', error);
                 }
-            }, 500);
+                // İzleyici için senkronizasyon
+                else {
+                    if (timeDiff > 1) {
+                        setIsSeeking(true);
+                        youtubePlayerRef.current.seekTo(currentTime, true);
+                        setTimeout(() => setIsSeeking(false), 200);
+                    }
+                }
 
-            return () => clearInterval(checkState);
-        }
-    }, [isCreator, socket, partyCode, isSeeking]);
+                lastTime = currentTime;
+            } catch (error) {
+                console.error('Sync error:', error);
+            }
+        };
+
+        // Senkronizasyon intervalini başlat
+        syncInterval = setInterval(syncWithCreator, 1000);
+
+        // Cleanup
+        return () => {
+            if (syncInterval) {
+                clearInterval(syncInterval);
+            }
+        };
+    }, [isCreator, socket, partyCode]);
 
     // Socket olaylarını dinle
     React.useEffect(() => {
@@ -72,62 +90,49 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
 
         socket.on('videoPlay', (data) => {
             if (!isCreator && youtubePlayerRef.current) {
-                console.log('Video play event received', data);
+                console.log('Viewer: Received play at', data.currentTime);
                 try {
                     const player = youtubePlayerRef.current;
-                    const currentTime = player.getCurrentTime();
-                    const timeDiff = Math.abs(currentTime - data.currentTime);
-
-                    if (timeDiff > 1) {
-                        player.seekTo(data.currentTime, true);
-                    }
+                    player.seekTo(data.currentTime, true);
                     player.playVideo();
                 } catch (error) {
-                    console.error('Video play failed:', error);
+                    console.error('Play failed:', error);
                 }
             }
         });
 
         socket.on('videoPause', (data) => {
             if (!isCreator && youtubePlayerRef.current) {
-                console.log('Video pause event received', data);
+                console.log('Viewer: Received pause at', data.currentTime);
                 try {
                     const player = youtubePlayerRef.current;
-                    const currentTime = player.getCurrentTime();
-                    const timeDiff = Math.abs(currentTime - data.currentTime);
-
                     player.pauseVideo();
-                    if (timeDiff > 1) {
-                        setTimeout(() => {
-                            player.seekTo(data.currentTime, true);
-                        }, 100);
-                    }
+                    setTimeout(() => {
+                        player.seekTo(data.currentTime, true);
+                    }, 100);
                 } catch (error) {
-                    console.error('Video pause failed:', error);
+                    console.error('Pause failed:', error);
                 }
             }
         });
 
         socket.on('videoSeek', (data) => {
             if (!isCreator && youtubePlayerRef.current && !isSeeking) {
-                console.log('Video seek event received', data);
+                console.log('Viewer: Received seek to', data.currentTime);
                 try {
                     setIsSeeking(true);
                     const player = youtubePlayerRef.current;
                     player.seekTo(data.currentTime, true);
                     
-                    // Seek işleminden sonra mevcut oynatma durumunu koru
                     setTimeout(() => {
                         const playerState = player.getPlayerState();
                         if (playerState === YT.PlayerState.PLAYING) {
                             player.playVideo();
-                        } else {
-                            player.pauseVideo();
                         }
                         setIsSeeking(false);
                     }, 200);
                 } catch (error) {
-                    console.error('Video seek failed:', error);
+                    console.error('Seek failed:', error);
                     setIsSeeking(false);
                 }
             }
