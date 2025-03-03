@@ -8,55 +8,28 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
     const [socket, setSocket] = React.useState(null);
     const [isSeeking, setIsSeeking] = React.useState(false);
     const [isActive, setIsActive] = React.useState(true);
+    const [lastUpdateTime, setLastUpdateTime] = React.useState(0);
+    const SYNC_THRESHOLD = 2; // 2 saniyelik senkronizasyon eşiği
 
-    // Olay işleyicilerini useCallback ile oluştur
-    const handlePlay = React.useCallback(() => {
-        if (isCreator && socket && videoRef.current) {
-            console.log('Video play event emitted');
-            socket.emit('videoPlay', {
-                partyCode,
-                currentTime: videoRef.current.currentTime
-            });
-        }
-    }, [isCreator, socket, partyCode]);
-
-    const handlePause = React.useCallback(() => {
-        if (isCreator && socket && videoRef.current) {
-            console.log('Video pause event emitted');
-            socket.emit('videoPause', {
-                partyCode,
-                currentTime: videoRef.current.currentTime
-            });
-        }
-    }, [isCreator, socket, partyCode]);
-
-    const handleSeeking = React.useCallback(() => {
-        if (isCreator && socket && videoRef.current && !isSeeking) {
-            console.log('Video seek event emitted');
-            socket.emit('videoSeek', {
-                partyCode,
-                currentTime: videoRef.current.currentTime
-            });
-        }
-    }, [isCreator, socket, partyCode, isSeeking]);
-
+    // Socket.IO bağlantısını kur
     React.useEffect(() => {
-        // Socket.IO bağlantısı
         const newSocket = io(window.location.origin);
         setSocket(newSocket);
 
-        // Parti odasına katıl
         if (partyCode) {
             newSocket.emit('joinRoom', partyCode);
         }
 
-        // Socket.IO olaylarını dinle
-        newSocket.on('videoPlay', async (currentTime) => {
+        // Socket olaylarını dinle
+        newSocket.on('videoPlay', (currentTime) => {
             if (!isCreator && videoRef.current) {
                 console.log('Video play event received', currentTime);
                 try {
-                    videoRef.current.currentTime = currentTime;
-                    await videoRef.current.play();
+                    const timeDiff = Math.abs(videoRef.current.currentTime - currentTime);
+                    if (timeDiff > SYNC_THRESHOLD) {
+                        videoRef.current.currentTime = currentTime;
+                    }
+                    videoRef.current.play();
                 } catch (error) {
                     console.error('Video play failed:', error);
                 }
@@ -86,13 +59,65 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             if (videoRef.current) {
                 videoRef.current.pause();
             }
-            window.location.reload(); // Sayfayı yenile
+            window.location.reload();
         });
 
         return () => {
             newSocket.disconnect();
         };
     }, [partyCode, isCreator]);
+
+    // Video olaylarını yönet
+    const handlePlay = React.useCallback(() => {
+        if (isCreator && socket && videoRef.current) {
+            console.log('Video play event emitted');
+            socket.emit('videoPlay', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
+        }
+    }, [isCreator, socket, partyCode]);
+
+    const handlePause = React.useCallback(() => {
+        if (isCreator && socket && videoRef.current) {
+            console.log('Video pause event emitted');
+            socket.emit('videoPause', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
+        }
+    }, [isCreator, socket, partyCode]);
+
+    const handleTimeUpdate = React.useCallback(() => {
+        if (isCreator && socket && videoRef.current && !isSeeking) {
+            const currentTime = videoRef.current.currentTime;
+            const timeSinceLastUpdate = Date.now() - lastUpdateTime;
+            
+            // Her 1 saniyede bir güncelleme gönder
+            if (timeSinceLastUpdate > 1000) {
+                socket.emit('videoSeek', {
+                    partyCode,
+                    currentTime: currentTime
+                });
+                setLastUpdateTime(Date.now());
+            }
+        }
+    }, [isCreator, socket, partyCode, isSeeking, lastUpdateTime]);
+
+    const handleSeeking = React.useCallback(() => {
+        if (isCreator && socket && videoRef.current && !isSeeking) {
+            console.log('Video seek event emitted');
+            setIsSeeking(true);
+            socket.emit('videoSeek', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
+        }
+    }, [isCreator, socket, partyCode, isSeeking]);
+
+    const handleSeeked = React.useCallback(() => {
+        setIsSeeking(false);
+    }, []);
 
     React.useEffect(() => {
         // Parti bilgilerini periyodik olarak kontrol et
@@ -231,7 +256,8 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
                     onPlay={handlePlay}
                     onPause={handlePause}
                     onSeeking={handleSeeking}
-                    onSeeked={() => setIsSeeking(false)}
+                    onSeeked={handleSeeked}
+                    onTimeUpdate={handleTimeUpdate}
                 >
                     <source src={videoUrl} type="video/mp4" />
                     Tarayıcınız video etiketini desteklemiyor.
