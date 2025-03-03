@@ -1,5 +1,6 @@
 function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
     const videoRef = React.useRef(null);
+    const youtubePlayerRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
     const [videoUrl, setVideoUrl] = React.useState('');
     const [videoType, setVideoType] = React.useState(''); // 'local', 'youtube', 'url'
@@ -10,39 +11,79 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
     const [lastUpdateTime, setLastUpdateTime] = React.useState(0);
     const SYNC_THRESHOLD = 2; // 2 saniyelik senkronizasyon eşiği
 
+    // YouTube Player API için event handlers
+    const onYouTubePlayerReady = React.useCallback((event) => {
+        if (isCreator) {
+            event.target.addEventListener('onStateChange', (state) => {
+                if (state.data === YT.PlayerState.PLAYING) {
+                    console.log('YouTube video play event emitted');
+                    socket.emit('videoPlay', {
+                        partyCode,
+                        currentTime: event.target.getCurrentTime()
+                    });
+                } else if (state.data === YT.PlayerState.PAUSED) {
+                    console.log('YouTube video pause event emitted');
+                    socket.emit('videoPause', {
+                        partyCode,
+                        currentTime: event.target.getCurrentTime()
+                    });
+                }
+            });
+        }
+        youtubePlayerRef.current = event.target;
+    }, [isCreator, socket, partyCode]);
+
     // Socket olaylarını dinle
     React.useEffect(() => {
         if (!socket) return;
 
-        // Socket olaylarını dinle
-        socket.on('videoPlay', (currentTime) => {
-            if (!isCreator && videoRef.current) {
-                console.log('Video play event received', currentTime);
+        socket.on('videoPlay', (data) => {
+            if (!isCreator) {
+                console.log('Video play event received', data);
                 try {
-                    const timeDiff = Math.abs(videoRef.current.currentTime - currentTime);
-                    if (timeDiff > SYNC_THRESHOLD) {
-                        videoRef.current.currentTime = currentTime;
+                    if (videoType === 'youtube' && youtubePlayerRef.current) {
+                        const player = youtubePlayerRef.current;
+                        const timeDiff = Math.abs(player.getCurrentTime() - data.currentTime);
+                        if (timeDiff > SYNC_THRESHOLD) {
+                            player.seekTo(data.currentTime);
+                        }
+                        player.playVideo();
+                    } else if (videoRef.current) {
+                        const timeDiff = Math.abs(videoRef.current.currentTime - data.currentTime);
+                        if (timeDiff > SYNC_THRESHOLD) {
+                            videoRef.current.currentTime = data.currentTime;
+                        }
+                        videoRef.current.play();
                     }
-                    videoRef.current.play();
                 } catch (error) {
                     console.error('Video play failed:', error);
                 }
             }
         });
 
-        socket.on('videoPause', (currentTime) => {
-            if (!isCreator && videoRef.current) {
-                console.log('Video pause event received', currentTime);
-                videoRef.current.currentTime = currentTime;
-                videoRef.current.pause();
+        socket.on('videoPause', (data) => {
+            if (!isCreator) {
+                console.log('Video pause event received', data);
+                if (videoType === 'youtube' && youtubePlayerRef.current) {
+                    const player = youtubePlayerRef.current;
+                    player.seekTo(data.currentTime);
+                    player.pauseVideo();
+                } else if (videoRef.current) {
+                    videoRef.current.currentTime = data.currentTime;
+                    videoRef.current.pause();
+                }
             }
         });
 
-        socket.on('videoSeek', (currentTime) => {
-            if (!isCreator && videoRef.current && !isSeeking) {
-                console.log('Video seek event received', currentTime);
+        socket.on('videoSeek', (data) => {
+            if (!isCreator && !isSeeking) {
+                console.log('Video seek event received', data);
                 setIsSeeking(true);
-                videoRef.current.currentTime = currentTime;
+                if (videoType === 'youtube' && youtubePlayerRef.current) {
+                    youtubePlayerRef.current.seekTo(data.currentTime);
+                } else if (videoRef.current) {
+                    videoRef.current.currentTime = data.currentTime;
+                }
                 setIsSeeking(false);
             }
         });
@@ -50,7 +91,9 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         socket.on('partyEnded', () => {
             console.log('Party ended event received');
             setIsActive(false);
-            if (videoRef.current) {
+            if (videoType === 'youtube' && youtubePlayerRef.current) {
+                youtubePlayerRef.current.stopVideo();
+            } else if (videoRef.current) {
                 videoRef.current.pause();
             }
             window.location.reload();
@@ -62,7 +105,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             socket.off('videoSeek');
             socket.off('partyEnded');
         };
-    }, [socket, isCreator, isSeeking]);
+    }, [socket, isCreator, isSeeking, videoType]);
 
     // Video olaylarını yönet
     const handlePlay = React.useCallback(() => {
@@ -126,7 +169,9 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 if (!party.objectData.isActive) {
                     console.log('Party is not active anymore');
                     setIsActive(false);
-                    if (videoRef.current) {
+                    if (videoType === 'youtube' && youtubePlayerRef.current) {
+                        youtubePlayerRef.current.stopVideo();
+                    } else if (videoRef.current) {
                         videoRef.current.pause();
                     }
                     window.location.reload(); // Sayfayı yenile
@@ -140,7 +185,9 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             } catch (error) {
                 if (error.message === 'This party has ended') {
                     setIsActive(false);
-                    if (videoRef.current) {
+                    if (videoType === 'youtube' && youtubePlayerRef.current) {
+                        youtubePlayerRef.current.stopVideo();
+                    } else if (videoRef.current) {
                         videoRef.current.pause();
                     }
                     window.location.reload(); // Sayfayı yenile
@@ -194,7 +241,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 if (!videoId) {
                     throw new Error('Geçersiz YouTube URL\'si');
                 }
-                finalUrl = `https://www.youtube.com/embed/${videoId}`;
+                finalUrl = videoId; // Sadece video ID'sini sakla
             }
 
             setVideoUrl(finalUrl);
@@ -233,13 +280,13 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
 
         if (videoType === 'youtube') {
             return (
-                <iframe
-                    className="w-full aspect-video"
-                    src={videoUrl}
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                ></iframe>
+                <div id="youtube-player" className="w-full aspect-video">
+                    <YTPlayer
+                        videoId={videoUrl}
+                        onReady={onYouTubePlayerReady}
+                        className="w-full h-full"
+                    />
+                </div>
             );
         }
 
@@ -334,5 +381,31 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 </div>
             )}
         </div>
+    );
+}
+
+// YouTube Player bileşeni
+function YTPlayer({ videoId, onReady, className }) {
+    const playerRef = React.useRef(null);
+
+    React.useEffect(() => {
+        // YouTube Player'ı oluştur
+        if (!playerRef.current && window.YT) {
+            playerRef.current = new window.YT.Player('youtube-player', {
+                videoId: videoId,
+                playerVars: {
+                    controls: 1,
+                    rel: 0,
+                    modestbranding: 1
+                },
+                events: {
+                    onReady: onReady
+                }
+            });
+        }
+    }, [videoId, onReady]);
+
+    return (
+        <div id="youtube-player" className={className}></div>
     );
 }
