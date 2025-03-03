@@ -1,27 +1,21 @@
-function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
+function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
     const videoRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
     const [videoUrl, setVideoUrl] = React.useState('');
     const [videoType, setVideoType] = React.useState(''); // 'local', 'youtube', 'url'
     const [urlInput, setUrlInput] = React.useState('');
     const [showUrlInput, setShowUrlInput] = React.useState(false);
-    const [socket, setSocket] = React.useState(null);
     const [isSeeking, setIsSeeking] = React.useState(false);
     const [isActive, setIsActive] = React.useState(true);
     const [lastUpdateTime, setLastUpdateTime] = React.useState(0);
     const SYNC_THRESHOLD = 2; // 2 saniyelik senkronizasyon eşiği
 
-    // Socket.IO bağlantısını kur
+    // Socket olaylarını dinle
     React.useEffect(() => {
-        const newSocket = io(window.location.origin);
-        setSocket(newSocket);
-
-        if (partyCode) {
-            newSocket.emit('joinRoom', partyCode);
-        }
+        if (!socket) return;
 
         // Socket olaylarını dinle
-        newSocket.on('videoPlay', (currentTime) => {
+        socket.on('videoPlay', (currentTime) => {
             if (!isCreator && videoRef.current) {
                 console.log('Video play event received', currentTime);
                 try {
@@ -36,7 +30,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             }
         });
 
-        newSocket.on('videoPause', (currentTime) => {
+        socket.on('videoPause', (currentTime) => {
             if (!isCreator && videoRef.current) {
                 console.log('Video pause event received', currentTime);
                 videoRef.current.currentTime = currentTime;
@@ -44,7 +38,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             }
         });
 
-        newSocket.on('videoSeek', (currentTime) => {
+        socket.on('videoSeek', (currentTime) => {
             if (!isCreator && videoRef.current && !isSeeking) {
                 console.log('Video seek event received', currentTime);
                 setIsSeeking(true);
@@ -53,7 +47,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             }
         });
 
-        newSocket.on('partyEnded', () => {
+        socket.on('partyEnded', () => {
             console.log('Party ended event received');
             setIsActive(false);
             if (videoRef.current) {
@@ -63,9 +57,12 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         });
 
         return () => {
-            newSocket.disconnect();
+            socket.off('videoPlay');
+            socket.off('videoPause');
+            socket.off('videoSeek');
+            socket.off('partyEnded');
         };
-    }, [partyCode, isCreator]);
+    }, [socket, isCreator, isSeeking]);
 
     // Video olaylarını yönet
     const handlePlay = React.useCallback(() => {
@@ -93,8 +90,8 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             const currentTime = videoRef.current.currentTime;
             const timeSinceLastUpdate = Date.now() - lastUpdateTime;
             
-            // Her 1 saniyede bir güncelleme gönder
             if (timeSinceLastUpdate > 1000) {
+                console.log('Video time update event emitted', currentTime);
                 socket.emit('videoSeek', {
                     partyCode,
                     currentTime: currentTime

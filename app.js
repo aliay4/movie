@@ -3,6 +3,19 @@ function App() {
     const [isCreator, setIsCreator] = React.useState(false);
     const [videoUrl, setVideoUrl] = React.useState('');
     const [userName, setUserName] = React.useState('');
+    const [socket, setSocket] = React.useState(null);
+
+    // Socket.IO bağlantısını kur
+    React.useEffect(() => {
+        const newSocket = io(window.location.origin);
+        setSocket(newSocket);
+
+        return () => {
+            if (newSocket) {
+                newSocket.disconnect();
+            }
+        };
+    }, []);
 
     const handleJoinParty = async (code, creator = false, name) => {
         try {
@@ -13,6 +26,10 @@ function App() {
             if (party.objectData.videoUrl) {
                 setVideoUrl(party.objectData.videoUrl);
             }
+            // Parti odasına katıl
+            if (socket && code) {
+                socket.emit('joinRoom', code);
+            }
         } catch (error) {
             reportError(error);
             alert('Partiye katılırken hata oluştu: ' + error.message);
@@ -20,17 +37,19 @@ function App() {
     };
 
     const handleEndParty = async () => {
+        if (!isCreator) return;
+
         try {
-            if (!isCreator) return;
-            
             await endParty(partyCode);
+            if (socket) {
+                socket.emit('endParty', partyCode);
+            }
             setPartyCode(null);
             setIsCreator(false);
-            setVideoUrl('');
-            setUserName('');
+            setVideoUrl(null);
+            setUserName(null);
         } catch (error) {
             reportError(error);
-            alert('Parti sonlandırılırken hata oluştu: ' + error.message);
         }
     };
 
@@ -87,6 +106,7 @@ function App() {
                                 partyCode={partyCode} 
                                 isCreator={isCreator}
                                 onVideoSelect={handleVideoSelect}
+                                socket={socket}
                             />
                         </div>
                         <div>
