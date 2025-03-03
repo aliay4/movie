@@ -8,6 +8,37 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
     const [socket, setSocket] = React.useState(null);
     const [isSeeking, setIsSeeking] = React.useState(false);
 
+    // Olay işleyicilerini useCallback ile oluştur
+    const handlePlay = React.useCallback(() => {
+        if (isCreator && socket && videoRef.current) {
+            console.log('Video play event emitted');
+            socket.emit('videoPlay', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
+        }
+    }, [isCreator, socket, partyCode]);
+
+    const handlePause = React.useCallback(() => {
+        if (isCreator && socket && videoRef.current) {
+            console.log('Video pause event emitted');
+            socket.emit('videoPause', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
+        }
+    }, [isCreator, socket, partyCode]);
+
+    const handleSeeking = React.useCallback(() => {
+        if (isCreator && socket && videoRef.current && !isSeeking) {
+            console.log('Video seek event emitted');
+            socket.emit('videoSeek', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
+        }
+    }, [isCreator, socket, partyCode, isSeeking]);
+
     React.useEffect(() => {
         // Socket.IO bağlantısı
         const newSocket = io(window.location.origin);
@@ -21,13 +52,17 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         // Socket.IO olaylarını dinle
         newSocket.on('videoPlay', (currentTime) => {
             if (!isCreator && videoRef.current) {
+                console.log('Video play event received', currentTime);
                 videoRef.current.currentTime = currentTime;
-                videoRef.current.play();
+                videoRef.current.play().catch(error => {
+                    console.error('Video play failed:', error);
+                });
             }
         });
 
         newSocket.on('videoPause', (currentTime) => {
             if (!isCreator && videoRef.current) {
+                console.log('Video pause event received', currentTime);
                 videoRef.current.currentTime = currentTime;
                 videoRef.current.pause();
             }
@@ -35,6 +70,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
 
         newSocket.on('videoSeek', (currentTime) => {
             if (!isCreator && videoRef.current && !isSeeking) {
+                console.log('Video seek event received', currentTime);
                 setIsSeeking(true);
                 videoRef.current.currentTime = currentTime;
                 setIsSeeking(false);
@@ -44,7 +80,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         return () => {
             newSocket.disconnect();
         };
-    }, [partyCode]);
+    }, [partyCode, isCreator]);
 
     // Video olaylarını dinle
     React.useEffect(() => {
@@ -149,33 +185,6 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         }
     };
 
-    const handlePlay = () => {
-        if (isCreator && socket && videoRef.current) {
-            socket.emit('videoPlay', {
-                partyCode,
-                currentTime: videoRef.current.currentTime
-            });
-        }
-    };
-
-    const handlePause = () => {
-        if (isCreator && socket && videoRef.current) {
-            socket.emit('videoPause', {
-                partyCode,
-                currentTime: videoRef.current.currentTime
-            });
-        }
-    };
-
-    const handleSeeking = () => {
-        if (isCreator && socket && videoRef.current && !isSeeking) {
-            socket.emit('videoSeek', {
-                partyCode,
-                currentTime: videoRef.current.currentTime
-            });
-        }
-    };
-
     const renderVideoContent = () => {
         if (!videoUrl) return null;
 
@@ -202,6 +211,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
                         onPlay={handlePlay}
                         onPause={handlePause}
                         onSeeking={handleSeeking}
+                        onSeeked={() => setIsSeeking(false)}
                     >
                         <source src={videoUrl} type="video/mp4" />
                         Tarayıcınız video etiketini desteklemiyor.
