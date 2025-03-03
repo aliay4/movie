@@ -2,7 +2,11 @@
 nixPkgs = ['nodejs-18_x']
 
 [phases.install]
-cmds = ['npm cache clean --force', 'npm install --no-audit --prefer-offline=false --unsafe-perm']
+cmds = [
+  'npm cache clean --force',
+  'rm -rf node_modules package-lock.json',
+  'npm install --production --no-package-lock'
+]
 
 [start]
 cmd = 'npm start' 
