@@ -30,16 +30,21 @@ io.on('connection', (socket) => {
   });
 
   // Video olayları
-  socket.on('videoPlay', (data) => {
-    socket.to(data.partyCode).emit('videoPlay', data.currentTime);
+  socket.on('videoPlay', ({ partyCode, currentTime }) => {
+    socket.to(partyCode).emit('videoPlay', currentTime);
   });
 
-  socket.on('videoPause', (data) => {
-    socket.to(data.partyCode).emit('videoPause', data.currentTime);
+  socket.on('videoPause', ({ partyCode, currentTime }) => {
+    socket.to(partyCode).emit('videoPause', currentTime);
   });
 
-  socket.on('videoSeek', (data) => {
-    socket.to(data.partyCode).emit('videoSeek', data.currentTime);
+  socket.on('videoSeek', ({ partyCode, currentTime }) => {
+    socket.to(partyCode).emit('videoSeek', currentTime);
+  });
+
+  socket.on('endParty', (partyCode) => {
+    io.to(partyCode).emit('partyEnded');
+    console.log(`Party ended: ${partyCode}`);
   });
 
   socket.on('disconnect', () => {

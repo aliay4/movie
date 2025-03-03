@@ -7,6 +7,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
     const [showUrlInput, setShowUrlInput] = React.useState(false);
     const [socket, setSocket] = React.useState(null);
     const [isSeeking, setIsSeeking] = React.useState(false);
+    const [isActive, setIsActive] = React.useState(true);
 
     // Olay işleyicilerini useCallback ile oluştur
     const handlePlay = React.useCallback(() => {
@@ -50,13 +51,15 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         }
 
         // Socket.IO olaylarını dinle
-        newSocket.on('videoPlay', (currentTime) => {
+        newSocket.on('videoPlay', async (currentTime) => {
             if (!isCreator && videoRef.current) {
                 console.log('Video play event received', currentTime);
-                videoRef.current.currentTime = currentTime;
-                videoRef.current.play().catch(error => {
+                try {
+                    videoRef.current.currentTime = currentTime;
+                    await videoRef.current.play();
+                } catch (error) {
                     console.error('Video play failed:', error);
-                });
+                }
             }
         });
 
@@ -77,27 +80,19 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             }
         });
 
+        newSocket.on('partyEnded', () => {
+            console.log('Party ended event received');
+            setIsActive(false);
+            if (videoRef.current) {
+                videoRef.current.pause();
+            }
+            window.location.reload(); // Sayfayı yenile
+        });
+
         return () => {
             newSocket.disconnect();
         };
     }, [partyCode, isCreator]);
-
-    // Video olaylarını dinle
-    React.useEffect(() => {
-        if (videoRef.current) {
-            videoRef.current.addEventListener('play', handlePlay);
-            videoRef.current.addEventListener('pause', handlePause);
-            videoRef.current.addEventListener('seeking', handleSeeking);
-
-            return () => {
-                if (videoRef.current) {
-                    videoRef.current.removeEventListener('play', handlePlay);
-                    videoRef.current.removeEventListener('pause', handlePause);
-                    videoRef.current.removeEventListener('seeking', handleSeeking);
-                }
-            };
-        }
-    }, [videoRef.current, socket, isCreator]);
 
     React.useEffect(() => {
         // Parti bilgilerini periyodik olarak kontrol et
@@ -106,12 +101,30 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
                 if (!partyCode) return;
                 
                 const party = await joinParty(partyCode);
+                if (!party.objectData.isActive) {
+                    console.log('Party is not active anymore');
+                    setIsActive(false);
+                    if (videoRef.current) {
+                        videoRef.current.pause();
+                    }
+                    window.location.reload(); // Sayfayı yenile
+                    return;
+                }
+
                 if (party.objectData.videoUrl && party.objectData.videoUrl !== videoUrl) {
                     setVideoUrl(party.objectData.videoUrl);
                     setVideoType(party.objectData.videoType);
                 }
             } catch (error) {
-                reportError(error);
+                if (error.message === 'This party has ended') {
+                    setIsActive(false);
+                    if (videoRef.current) {
+                        videoRef.current.pause();
+                    }
+                    window.location.reload(); // Sayfayı yenile
+                } else {
+                    reportError(error);
+                }
             }
         };
 
@@ -188,6 +201,14 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
     const renderVideoContent = () => {
         if (!videoUrl) return null;
 
+        if (!isActive) {
+            return (
+                <div className="flex items-center justify-center h-full min-h-[300px] bg-gray-800 text-white">
+                    <p>Bu parti sona erdi.</p>
+                </div>
+            );
+        }
+
         if (videoType === 'youtube') {
             return (
                 <iframe
@@ -200,43 +221,29 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
             );
         }
 
-        if (videoType === 'local' || videoType === 'url') {
-            return (
-                <div>
-                    <video
-                        ref={videoRef}
-                        className="w-full h-full"
-                        controls
-                        crossOrigin="anonymous"
-                        onPlay={handlePlay}
-                        onPause={handlePause}
-                        onSeeking={handleSeeking}
-                        onSeeked={() => setIsSeeking(false)}
-                    >
-                        <source src={videoUrl} type="video/mp4" />
-                        Tarayıcınız video etiketini desteklemiyor.
-                    </video>
-                    {videoType === 'local' && (
-                        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2">
-                            <p className="font-bold">Not:</p>
-                            <p>Bu yerel video sadece sizin tarayıcınızda görünecektir. Diğer katılımcılar göremeyecektir.</p>
-                            <p>Herkesin görebilmesi için bir video URL'si kullanmanız önerilir.</p>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
         return (
-            <video
-                ref={videoRef}
-                className="w-full h-full"
-                controls
-                crossOrigin="anonymous"
-            >
-                <source src={videoUrl} type="video/mp4" />
-                Tarayıcınız video etiketini desteklemiyor.
-            </video>
+            <div>
+                <video
+                    ref={videoRef}
+                    className="w-full h-full"
+                    controls
+                    crossOrigin="anonymous"
+                    onPlay={handlePlay}
+                    onPause={handlePause}
+                    onSeeking={handleSeeking}
+                    onSeeked={() => setIsSeeking(false)}
+                >
+                    <source src={videoUrl} type="video/mp4" />
+                    Tarayıcınız video etiketini desteklemiyor.
+                </video>
+                {videoType === 'local' && (
+                    <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2">
+                        <p className="font-bold">Not:</p>
+                        <p>Bu yerel video sadece sizin tarayıcınızda görünecektir. Diğer katılımcılar göremeyecektir.</p>
+                        <p>Herkesin görebilmesi için bir video URL'si kullanmanız önerilir.</p>
+                    </div>
+                )}
+            </div>
         );
     };
 
