@@ -29,14 +29,30 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                         partyCode,
                         currentTime: currentTime
                     });
-                } else if (state.data === YT.PlayerState.BUFFERING) {
-                    console.log('YouTube video seek event emitted', currentTime);
+                }
+            });
+
+            // Seeking için özel event listener
+            let lastTime = 0;
+            const checkSeek = setInterval(() => {
+                if (!event.target) {
+                    clearInterval(checkSeek);
+                    return;
+                }
+                const currentTime = event.target.getCurrentTime();
+                const timeDiff = Math.abs(currentTime - lastTime);
+                
+                if (timeDiff > 2) { // 2 saniyeden fazla fark varsa seek olarak kabul et
+                    console.log('YouTube video seek detected', currentTime);
                     socket.emit('videoSeek', {
                         partyCode,
                         currentTime: currentTime
                     });
                 }
-            });
+                lastTime = currentTime;
+            }, 1000);
+
+            return () => clearInterval(checkSeek);
         }
         youtubePlayerRef.current = event.target;
     }, [isCreator, socket, partyCode]);
@@ -46,17 +62,14 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         if (!socket) return;
 
         socket.on('videoPlay', (data) => {
-            if (!isCreator) {
+            if (!isCreator && youtubePlayerRef.current) {
                 console.log('Video play event received', data);
                 try {
-                    if (videoType === 'youtube' && youtubePlayerRef.current) {
-                        const player = youtubePlayerRef.current;
-                        player.seekTo(data.currentTime, true);
+                    const player = youtubePlayerRef.current;
+                    player.seekTo(data.currentTime, true);
+                    setTimeout(() => {
                         player.playVideo();
-                    } else if (videoRef.current) {
-                        videoRef.current.currentTime = data.currentTime;
-                        videoRef.current.play();
-                    }
+                    }, 100);
                 } catch (error) {
                     console.error('Video play failed:', error);
                 }
@@ -64,29 +77,25 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         });
 
         socket.on('videoPause', (data) => {
-            if (!isCreator) {
+            if (!isCreator && youtubePlayerRef.current) {
                 console.log('Video pause event received', data);
-                if (videoType === 'youtube' && youtubePlayerRef.current) {
-                    const player = youtubePlayerRef.current;
-                    player.seekTo(data.currentTime, true);
+                const player = youtubePlayerRef.current;
+                player.seekTo(data.currentTime, true);
+                setTimeout(() => {
                     player.pauseVideo();
-                } else if (videoRef.current) {
-                    videoRef.current.currentTime = data.currentTime;
-                    videoRef.current.pause();
-                }
+                }, 100);
             }
         });
 
         socket.on('videoSeek', (data) => {
-            if (!isCreator && !isSeeking) {
+            if (!isCreator && youtubePlayerRef.current && !isSeeking) {
                 console.log('Video seek event received', data);
                 setIsSeeking(true);
-                if (videoType === 'youtube' && youtubePlayerRef.current) {
-                    youtubePlayerRef.current.seekTo(data.currentTime, true);
-                } else if (videoRef.current) {
-                    videoRef.current.currentTime = data.currentTime;
-                }
-                setTimeout(() => setIsSeeking(false), 500);
+                const player = youtubePlayerRef.current;
+                player.seekTo(data.currentTime, true);
+                setTimeout(() => {
+                    setIsSeeking(false);
+                }, 1000);
             }
         });
 
@@ -95,8 +104,6 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             setIsActive(false);
             if (videoType === 'youtube' && youtubePlayerRef.current) {
                 youtubePlayerRef.current.stopVideo();
-            } else if (videoRef.current) {
-                videoRef.current.pause();
             }
             window.location.reload();
         });
