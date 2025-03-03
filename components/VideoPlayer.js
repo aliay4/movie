@@ -18,7 +18,6 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         // Her iki taraf için de durum kontrolü yap
         let lastTime = 0;
         let lastState = null;
-        let syncInterval = null;
 
         const syncWithCreator = async () => {
             if (!youtubePlayerRef.current) return;
@@ -26,20 +25,17 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             try {
                 const currentTime = youtubePlayerRef.current.getCurrentTime();
                 const playerState = youtubePlayerRef.current.getPlayerState();
-                const timeDiff = Math.abs(currentTime - lastTime);
 
                 // Yaratıcı için event gönderme
                 if (isCreator) {
                     if (playerState !== lastState) {
                         if (playerState === YT.PlayerState.PLAYING) {
-                            console.log('Creator: Video playing at', currentTime);
                             socket.emit('videoPlay', {
                                 partyCode,
                                 currentTime: currentTime,
                                 timestamp: Date.now()
                             });
                         } else if (playerState === YT.PlayerState.PAUSED) {
-                            console.log('Creator: Video paused at', currentTime);
                             socket.emit('videoPause', {
                                 partyCode,
                                 currentTime: currentTime,
@@ -49,21 +45,12 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                         lastState = playerState;
                     }
 
-                    if (timeDiff > 1) {
-                        console.log('Creator: Video seeked to', currentTime);
+                    if (Math.abs(currentTime - lastTime) > 1) {
                         socket.emit('videoSeek', {
                             partyCode,
                             currentTime: currentTime,
                             timestamp: Date.now()
                         });
-                    }
-                }
-                // İzleyici için senkronizasyon
-                else {
-                    if (timeDiff > 1) {
-                        setIsSeeking(true);
-                        youtubePlayerRef.current.seekTo(currentTime, true);
-                        setTimeout(() => setIsSeeking(false), 200);
                     }
                 }
 
@@ -74,7 +61,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         };
 
         // Senkronizasyon intervalini başlat
-        syncInterval = setInterval(syncWithCreator, 1000);
+        const syncInterval = setInterval(syncWithCreator, 500);
 
         // Cleanup
         return () => {
@@ -93,7 +80,12 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 console.log('Viewer: Received play at', data.currentTime);
                 try {
                     const player = youtubePlayerRef.current;
-                    player.seekTo(data.currentTime, true);
+                    const currentTime = player.getCurrentTime();
+                    
+                    // Sadece zaman farkı 1 saniyeden fazlaysa senkronize et
+                    if (Math.abs(currentTime - data.currentTime) > 1) {
+                        player.seekTo(data.currentTime, true);
+                    }
                     player.playVideo();
                 } catch (error) {
                     console.error('Play failed:', error);
@@ -107,9 +99,12 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 try {
                     const player = youtubePlayerRef.current;
                     player.pauseVideo();
-                    setTimeout(() => {
+                    
+                    // Sadece zaman farkı 1 saniyeden fazlaysa senkronize et
+                    const currentTime = player.getCurrentTime();
+                    if (Math.abs(currentTime - data.currentTime) > 1) {
                         player.seekTo(data.currentTime, true);
-                    }, 100);
+                    }
                 } catch (error) {
                     console.error('Pause failed:', error);
                 }
@@ -124,6 +119,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                     const player = youtubePlayerRef.current;
                     player.seekTo(data.currentTime, true);
                     
+                    // Oynatma durumunu koru
                     setTimeout(() => {
                         const playerState = player.getPlayerState();
                         if (playerState === YT.PlayerState.PLAYING) {
