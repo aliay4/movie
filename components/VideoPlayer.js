@@ -15,23 +15,25 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
     const onYouTubePlayerReady = React.useCallback((event) => {
         if (isCreator) {
             event.target.addEventListener('onStateChange', (state) => {
+                const currentTime = event.target.getCurrentTime();
+                
                 if (state.data === YT.PlayerState.PLAYING) {
-                    console.log('YouTube video play event emitted');
+                    console.log('YouTube video play event emitted', currentTime);
                     socket.emit('videoPlay', {
                         partyCode,
-                        currentTime: event.target.getCurrentTime()
+                        currentTime: currentTime
                     });
                 } else if (state.data === YT.PlayerState.PAUSED) {
-                    console.log('YouTube video pause event emitted');
+                    console.log('YouTube video pause event emitted', currentTime);
                     socket.emit('videoPause', {
                         partyCode,
-                        currentTime: event.target.getCurrentTime()
+                        currentTime: currentTime
                     });
                 } else if (state.data === YT.PlayerState.BUFFERING) {
-                    console.log('YouTube video seek event emitted');
+                    console.log('YouTube video seek event emitted', currentTime);
                     socket.emit('videoSeek', {
                         partyCode,
-                        currentTime: event.target.getCurrentTime()
+                        currentTime: currentTime
                     });
                 }
             });
@@ -45,20 +47,14 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
 
         socket.on('videoPlay', (data) => {
             if (!isCreator) {
-                console.log('Video play event received', data.currentTime);
+                console.log('Video play event received', data);
                 try {
                     if (videoType === 'youtube' && youtubePlayerRef.current) {
                         const player = youtubePlayerRef.current;
-                        const timeDiff = Math.abs(player.getCurrentTime() - data.currentTime);
-                        if (timeDiff > SYNC_THRESHOLD) {
-                            player.seekTo(data.currentTime, true);
-                        }
+                        player.seekTo(data.currentTime, true);
                         player.playVideo();
                     } else if (videoRef.current) {
-                        const timeDiff = Math.abs(videoRef.current.currentTime - data.currentTime);
-                        if (timeDiff > SYNC_THRESHOLD) {
-                            videoRef.current.currentTime = data.currentTime;
-                        }
+                        videoRef.current.currentTime = data.currentTime;
                         videoRef.current.play();
                     }
                 } catch (error) {
@@ -69,19 +65,13 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
 
         socket.on('videoPause', (data) => {
             if (!isCreator) {
-                console.log('Video pause event received', data.currentTime);
+                console.log('Video pause event received', data);
                 if (videoType === 'youtube' && youtubePlayerRef.current) {
                     const player = youtubePlayerRef.current;
-                    const timeDiff = Math.abs(player.getCurrentTime() - data.currentTime);
-                    if (timeDiff > SYNC_THRESHOLD) {
-                        player.seekTo(data.currentTime, true);
-                    }
+                    player.seekTo(data.currentTime, true);
                     player.pauseVideo();
                 } else if (videoRef.current) {
-                    const timeDiff = Math.abs(videoRef.current.currentTime - data.currentTime);
-                    if (timeDiff > SYNC_THRESHOLD) {
-                        videoRef.current.currentTime = data.currentTime;
-                    }
+                    videoRef.current.currentTime = data.currentTime;
                     videoRef.current.pause();
                 }
             }
@@ -89,14 +79,14 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
 
         socket.on('videoSeek', (data) => {
             if (!isCreator && !isSeeking) {
-                console.log('Video seek event received', data.currentTime);
+                console.log('Video seek event received', data);
                 setIsSeeking(true);
                 if (videoType === 'youtube' && youtubePlayerRef.current) {
                     youtubePlayerRef.current.seekTo(data.currentTime, true);
                 } else if (videoRef.current) {
                     videoRef.current.currentTime = data.currentTime;
                 }
-                setTimeout(() => setIsSeeking(false), 100);
+                setTimeout(() => setIsSeeking(false), 500);
             }
         });
 
@@ -167,7 +157,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 partyCode,
                 currentTime: currentTime
             });
-            setTimeout(() => setIsSeeking(false), 100);
+            setTimeout(() => setIsSeeking(false), 500);
         }
     }, [isCreator, socket, partyCode, isSeeking]);
 
