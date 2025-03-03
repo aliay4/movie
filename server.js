@@ -12,8 +12,8 @@ app.use(express.static('.'));
 
 // MongoDB connection
 console.log('Mevcut ortam değişkenleri:', {
-  MONGO_URI: process.env.MONGO_URI,
-  MONGODB_URI: process.env.MONGODB_URI
+  MONGO_URL: process.env.MONGO_URL,
+  MONGODB_URL: process.env.MONGODB_URL
 });
 
 // Railway'de MongoDB bağlantı dizesini doğrudan ayarlama
