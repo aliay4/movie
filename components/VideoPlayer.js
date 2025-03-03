@@ -5,6 +5,46 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
     const [videoType, setVideoType] = React.useState(''); // 'local', 'youtube', 'url'
     const [urlInput, setUrlInput] = React.useState('');
     const [showUrlInput, setShowUrlInput] = React.useState(false);
+    const [socket, setSocket] = React.useState(null);
+    const [isSeeking, setIsSeeking] = React.useState(false);
+
+    React.useEffect(() => {
+        // Socket.IO bağlantısı
+        const newSocket = io(window.location.origin);
+        setSocket(newSocket);
+
+        // Parti odasına katıl
+        if (partyCode) {
+            newSocket.emit('joinRoom', partyCode);
+        }
+
+        // Socket.IO olaylarını dinle
+        newSocket.on('videoPlay', (currentTime) => {
+            if (!isCreator && videoRef.current) {
+                videoRef.current.currentTime = currentTime;
+                videoRef.current.play();
+            }
+        });
+
+        newSocket.on('videoPause', (currentTime) => {
+            if (!isCreator && videoRef.current) {
+                videoRef.current.currentTime = currentTime;
+                videoRef.current.pause();
+            }
+        });
+
+        newSocket.on('videoSeek', (currentTime) => {
+            if (!isCreator && videoRef.current && !isSeeking) {
+                setIsSeeking(true);
+                videoRef.current.currentTime = currentTime;
+                setIsSeeking(false);
+            }
+        });
+
+        return () => {
+            newSocket.disconnect();
+        };
+    }, [partyCode]);
 
     React.useEffect(() => {
         // Parti bilgilerini periyodik olarak kontrol et
@@ -30,27 +70,6 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         
         return () => clearInterval(interval);
     }, [partyCode, videoUrl]);
-
-    React.useEffect(() => {
-        try {
-            // Initialize video synchronization
-            if (videoRef.current) {
-                videoRef.current.addEventListener('play', handlePlay);
-                videoRef.current.addEventListener('pause', handlePause);
-                videoRef.current.addEventListener('seeking', handleSeeking);
-            }
-
-            return () => {
-                if (videoRef.current) {
-                    videoRef.current.removeEventListener('play', handlePlay);
-                    videoRef.current.removeEventListener('pause', handlePause);
-                    videoRef.current.removeEventListener('seeking', handleSeeking);
-                }
-            };
-        } catch (error) {
-            reportError(error);
-        }
-    }, [partyCode]);
 
     const handleFileSelect = async (e) => {
         try {
@@ -113,39 +132,30 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect }) {
         }
     };
 
-    const handlePlay = async () => {
-        try {
-            if (!isCreator || !videoRef.current) return;
-            
-            // Diğer katılımcılara video durumunu bildir
-            console.log('Video played at:', videoRef.current.currentTime);
-            // Burada gerçek bir senkronizasyon API'si çağrılabilir
-        } catch (error) {
-            reportError(error);
+    const handlePlay = () => {
+        if (isCreator && socket && videoRef.current) {
+            socket.emit('videoPlay', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
         }
     };
 
-    const handlePause = async () => {
-        try {
-            if (!isCreator || !videoRef.current) return;
-            
-            // Diğer katılımcılara video durumunu bildir
-            console.log('Video paused at:', videoRef.current.currentTime);
-            // Burada gerçek bir senkronizasyon API'si çağrılabilir
-        } catch (error) {
-            reportError(error);
+    const handlePause = () => {
+        if (isCreator && socket && videoRef.current) {
+            socket.emit('videoPause', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
         }
     };
 
-    const handleSeeking = async () => {
-        try {
-            if (!isCreator || !videoRef.current) return;
-            
-            // Diğer katılımcılara video durumunu bildir
-            console.log('Video seeking to:', videoRef.current.currentTime);
-            // Burada gerçek bir senkronizasyon API'si çağrılabilir
-        } catch (error) {
-            reportError(error);
+    const handleSeeking = () => {
+        if (isCreator && socket && videoRef.current && !isSeeking) {
+            socket.emit('videoSeek', {
+                partyCode,
+                currentTime: videoRef.current.currentTime
+            });
         }
     };
 

@@ -2,13 +2,50 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
+
+// Socket.IO events
+io.on('connection', (socket) => {
+  console.log('Yeni kullanıcı bağlandı:', socket.id);
+
+  // Bir odaya katılma
+  socket.on('joinRoom', (partyCode) => {
+    socket.join(partyCode);
+    console.log(`Kullanıcı ${socket.id} ${partyCode} odasına katıldı`);
+  });
+
+  // Video olayları
+  socket.on('videoPlay', (data) => {
+    socket.to(data.partyCode).emit('videoPlay', data.currentTime);
+  });
+
+  socket.on('videoPause', (data) => {
+    socket.to(data.partyCode).emit('videoPause', data.currentTime);
+  });
+
+  socket.on('videoSeek', (data) => {
+    socket.to(data.partyCode).emit('videoSeek', data.currentTime);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Kullanıcı ayrıldı:', socket.id);
+  });
+});
 
 // MongoDB connection
 console.log('Mevcut ortam değişkenleri:', {
@@ -142,6 +179,6 @@ app.get('/api/messages/:partyCode', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
