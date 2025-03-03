@@ -13,13 +13,11 @@ app.use(express.static('.'));
 // MongoDB connection
 console.log('Mevcut ortam değişkenleri:', {
   MONGO_URL: process.env.MONGO_URL,
-  MONGODB_URL: process.env.MONGODB_URL
+  MONGODB_URI: process.env.MONGODB_URI,
+  MONGO_URI: process.env.MONGO_URI
 });
 
-// Railway'de MongoDB bağlantı dizesini doğrudan ayarlama
-// NOT: Bu geçici bir çözümdür, güvenlik açısından ortam değişkenleri kullanmak daha iyidir
-const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 
-  // Aşağıdaki satırı Railway'deki MongoDB bağlantı dizesi ile değiştirin
+const MONGODB_URI = process.env.MONGO_URL || process.env.MONGODB_URI || process.env.MONGO_URI || 
   'mongodb://localhost:27017/movie-party';
 
 console.log('Trying to connect to MongoDB with URI:', MONGODB_URI);
