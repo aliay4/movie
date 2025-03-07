@@ -212,11 +212,21 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             window.location.reload();
         });
 
+        // Manuel senkronizasyon olayını dinle
+        socket.on('manualSync', (data) => {
+            console.log('Manual sync received:', data);
+            // Sohbete mesaj ekle
+            if (data.message) {
+                alert(`Senkronizasyon: ${data.message}`);
+            }
+        });
+
         return () => {
             socket.off('videoPlay');
             socket.off('videoPause');
             socket.off('videoSeek');
             socket.off('partyEnded');
+            socket.off('manualSync');
         };
     }, [socket, isCreator, isSeeking, videoType]);
 
@@ -342,6 +352,37 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         }
     };
 
+    const extractYoutubeId = (url) => {
+        try {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        } catch (error) {
+            reportError(error);
+            return null;
+        }
+    };
+
+    // Film sitesi URL'sini kontrol et
+    const isMovieSiteUrl = (url) => {
+        try {
+            // Desteklenen film sitelerinin domain listesi
+            const movieSiteDomains = [
+                'hdfilmcehennemi.', 'fullhdfilmizlesene.', 'filmizle.', 'dizibox.',
+                'dizilab.', 'dizilla.', 'jetfilmizle.', 'filmmakinesi.',
+                'hdfilmcehennemi2.', 'filmmodu.', 'fullhdfilmizle.',
+                'netflix.', 'amazon.', 'hulu.', 'disney.', 'blutv.', 'exxen.',
+                'puhu.', 'mubi.', 'filmbox.'
+            ];
+            
+            // URL'yi kontrol et
+            const urlObj = new URL(url);
+            return movieSiteDomains.some(domain => urlObj.hostname.includes(domain));
+        } catch (error) {
+            return false;
+        }
+    };
+
     const handleUrlSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -350,7 +391,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             let finalUrl = urlInput.trim();
             let type = 'url';
 
-            // Check if it's a YouTube URL
+            // YouTube URL kontrolü
             if (finalUrl.includes('youtube.com') || finalUrl.includes('youtu.be')) {
                 type = 'youtube';
                 // Extract video ID
@@ -359,6 +400,12 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                     throw new Error('Geçersiz YouTube URL\'si');
                 }
                 finalUrl = videoId; // Sadece video ID'sini sakla
+            }
+            // Film sitesi URL kontrolü
+            else if (isMovieSiteUrl(finalUrl)) {
+                type = 'moviesite';
+                // URL'yi olduğu gibi kullan
+                console.log('Film sitesi URL\'si tespit edildi:', finalUrl);
             }
 
             setVideoUrl(finalUrl);
@@ -370,17 +417,6 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         } catch (error) {
             reportError(error);
             alert('Video yüklenirken hata oluştu: ' + error.message);
-        }
-    };
-
-    const extractYoutubeId = (url) => {
-        try {
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-            const match = url.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : null;
-        } catch (error) {
-            reportError(error);
-            return null;
         }
     };
 
@@ -403,6 +439,59 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                         onReady={onYouTubePlayerReady}
                         className="w-full h-full"
                     />
+                </div>
+            );
+        }
+        
+        // Film sitesi embed desteği
+        if (videoType === 'moviesite') {
+            return (
+                <div className="w-full aspect-video relative">
+                    <iframe
+                        src={videoUrl}
+                        className="w-full h-full"
+                        frameBorder="0"
+                        allowFullScreen
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                    ></iframe>
+                    
+                    {isCreator && (
+                        <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 p-2 rounded-lg">
+                            <button 
+                                onClick={() => {
+                                    const timestamp = prompt("Şu anki zaman damgasını girin (örn: 1:30:45):");
+                                    if (timestamp) {
+                                        // Zaman damgasını saniyeye çevir
+                                        const parts = timestamp.split(':').map(Number);
+                                        let seconds = 0;
+                                        if (parts.length === 3) { // saat:dakika:saniye
+                                            seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                                        } else if (parts.length === 2) { // dakika:saniye
+                                            seconds = parts[0] * 60 + parts[1];
+                                        } else {
+                                            seconds = parts[0];
+                                        }
+                                        
+                                        // Zaman damgasını gönder
+                                        socket.emit('manualSync', {
+                                            partyCode,
+                                            timestamp: seconds,
+                                            message: `Film ${formatTime(seconds)} noktasına senkronize edildi.`
+                                        });
+                                    }
+                                }}
+                                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                            >
+                                <i className="fas fa-sync-alt mr-1"></i> Senkronize Et
+                            </button>
+                        </div>
+                    )}
+                    
+                    <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2">
+                        <p className="font-bold">Not:</p>
+                        <p>Film sitesi videoları için otomatik senkronizasyon mevcut değildir. Herkesin manuel olarak aynı noktaya gitmesi gerekir.</p>
+                        <p>Parti yaratıcısı "Senkronize Et" butonunu kullanarak zaman damgası paylaşabilir.</p>
+                    </div>
                 </div>
             );
         }
@@ -432,6 +521,19 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 )}
             </div>
         );
+    };
+
+    // Zaman formatı yardımcı fonksiyonu
+    const formatTime = (seconds) => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        
+        const hDisplay = h > 0 ? h + ":" : "";
+        const mDisplay = m < 10 ? "0" + m + ":" : m + ":";
+        const sDisplay = s < 10 ? "0" + s : s;
+        
+        return hDisplay + mDisplay + sDisplay;
     };
 
     return (

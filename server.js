@@ -30,16 +30,22 @@ io.on('connection', (socket) => {
   });
 
   // Video olayları
-  socket.on('videoPlay', ({ partyCode, currentTime }) => {
-    socket.to(partyCode).emit('videoPlay', currentTime);
+  socket.on('videoPlay', (data) => {
+    socket.to(data.partyCode).emit('videoPlay', data);
   });
 
-  socket.on('videoPause', ({ partyCode, currentTime }) => {
-    socket.to(partyCode).emit('videoPause', currentTime);
+  socket.on('videoPause', (data) => {
+    socket.to(data.partyCode).emit('videoPause', data);
   });
 
-  socket.on('videoSeek', ({ partyCode, currentTime }) => {
-    socket.to(partyCode).emit('videoSeek', currentTime);
+  socket.on('videoSeek', (data) => {
+    socket.to(data.partyCode).emit('videoSeek', data);
+  });
+
+  // Manuel senkronizasyon olayı
+  socket.on('manualSync', (data) => {
+    socket.to(data.partyCode).emit('manualSync', data);
+    console.log(`Manuel senkronizasyon: ${data.partyCode}, zaman: ${data.timestamp}`);
   });
 
   socket.on('endParty', (partyCode) => {
