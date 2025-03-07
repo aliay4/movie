@@ -454,22 +454,24 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 // Film sitelerinin embed URL'lerini düzenle
                 if (finalUrl.includes('hdfilmcehennemi')) {
                     // hdfilmcehennemi için embed URL'si
-                    const match = finalUrl.match(/\/([^\/]+?)(?:-izle)?(?:\/|\?|$)/);
+                    const match = finalUrl.match(/\/([^\/]+?)(?:\/|\?|$)/);
                     if (match && match[1]) {
                         const filmSlug = match[1].replace(/-izle$/, '');
-                        // Farklı domain'leri dene
-                        const domains = [
-                            'https://www.hdfilmcehennemi.nl',
-                            'https://hdfilmcehennemi.cx',
-                            'https://www.hdfilmcehennemi.net',
-                            'https://hdfilmcehennemi.tv'
-                        ];
+                        // Film slug'ını temizle
+                        const cleanSlug = filmSlug
+                            .replace(/[^a-z0-9-]/g, '')
+                            .replace(/-+/g, '-')
+                            .replace(/^-|-$/g, '');
                         
-                        // URL'yi düzenle
-                        const cleanSlug = filmSlug.replace(/[^a-z0-9-]/g, '');
-                        finalUrl = `${domains[0]}/player/${cleanSlug}`;
+                        // Orijinal URL'den domain'i al
+                        const urlObj = new URL(finalUrl);
+                        const domain = urlObj.protocol + '//' + urlObj.hostname;
+                        
+                        // Player URL'sini oluştur
+                        finalUrl = `${domain}/player/${cleanSlug}`;
                         
                         console.log('Film slug:', cleanSlug);
+                        console.log('Domain:', domain);
                         console.log('Final URL:', finalUrl);
                     }
                 } else if (finalUrl.includes('dizibox')) {

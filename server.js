@@ -65,20 +65,24 @@ app.get('/proxy', async (req, res) => {
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'iframe',
+            'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'cross-site',
+            'Sec-Fetch-Site': 'none',
             'Sec-Fetch-User': '?1',
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
-            'DNT': '1',
-            'Referer': url,
-            'Origin': new URL(url).origin,
-            'Host': new URL(url).host,
-            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"'
+            'DNT': '1'
         };
+
+        // URL'den hostname'i al ve Referer/Origin/Host başlıklarını ayarla
+        try {
+            const urlObj = new URL(url);
+            headers['Referer'] = urlObj.origin;
+            headers['Origin'] = urlObj.origin;
+            headers['Host'] = urlObj.host;
+        } catch (error) {
+            console.error('URL parsing error:', error);
+        }
 
         console.log(`Proxy request to: ${url}`);
         console.log('Request headers:', headers);
@@ -116,9 +120,9 @@ app.get('/proxy', async (req, res) => {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
         res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.removeHeader('X-Frame-Options');
+        res.removeHeader('Content-Security-Policy');
         res.setHeader('Content-Type', contentType);
-        res.setHeader('X-Frame-Options', 'ALLOWALL');
-        res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-ancestors * 'self'");
         
         // HTML içeriğini değiştir
         if (contentType.includes('html')) {
