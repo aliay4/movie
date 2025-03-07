@@ -30,23 +30,27 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         if (isCreator) {
             console.log('Setting up creator event listeners');
             
-            // YouTube API'nin doğru event bağlama yöntemini kullanıyoruz
-            youtubePlayerRef.current.addEventListener('statechange', (stateEvent) => {
+            // Doğrudan YouTube API'nin onStateChange olayını kullanıyoruz
+            event.target.addEventListener('onStateChange', function(e) {
                 if (ignoreStateChanges) return;
                 
-                const playerState = youtubePlayerRef.current.getPlayerState();
+                const playerState = e.data;
                 console.log(`Creator: State changed to ${playerState}`);
                 
                 if (playerState === YT.PlayerState.PLAYING) {
+                    const currentTime = youtubePlayerRef.current.getCurrentTime();
+                    console.log(`Creator: Video playing at ${currentTime}`);
                     socket.emit('videoPlay', {
                         partyCode,
-                        currentTime: youtubePlayerRef.current.getCurrentTime(),
+                        currentTime,
                         timestamp: Date.now()
                     });
                 } else if (playerState === YT.PlayerState.PAUSED) {
+                    const currentTime = youtubePlayerRef.current.getCurrentTime();
+                    console.log(`Creator: Video paused at ${currentTime}`);
                     socket.emit('videoPause', {
                         partyCode,
-                        currentTime: youtubePlayerRef.current.getCurrentTime(),
+                        currentTime,
                         timestamp: Date.now()
                     });
                 }
@@ -76,7 +80,8 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                         socket.emit('videoSeek', {
                             partyCode,
                             currentTime,
-                            timestamp: Date.now()
+                            timestamp: Date.now(),
+                            isPlaying: playerState === YT.PlayerState.PLAYING
                         });
                         
                         setLastUpdateTime(currentTime);
@@ -111,21 +116,20 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 try {
                     setIgnoreStateChanges(true);
                     const player = youtubePlayerRef.current;
-                    const currentTime = player.getCurrentTime();
                     
-                    // Zaman farkı kontrolü
-                    if (Math.abs(currentTime - data.currentTime) > SYNC_THRESHOLD) {
-                        console.log(`Viewer: Syncing time from ${currentTime} to ${data.currentTime}`);
-                        player.seekTo(data.currentTime, true);
-                    }
+                    // Önce zaman senkronize et, sonra oynat
+                    player.seekTo(data.currentTime, true);
                     
-                    // Doğrudan oynat
-                    player.playVideo();
-                    
-                    // Kısa bir süre sonra durum değişikliklerini tekrar dinle
+                    // Kısa bir gecikme ile oynat
                     setTimeout(() => {
-                        setIgnoreStateChanges(false);
-                    }, 1000);
+                        player.playVideo();
+                        
+                        // Durum değişikliklerini tekrar dinle
+                        setTimeout(() => {
+                            setIgnoreStateChanges(false);
+                        }, 1000);
+                    }, 200);
+                    
                 } catch (error) {
                     console.error('Play failed:', error);
                     setIgnoreStateChanges(false);
@@ -143,19 +147,16 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                     // Önce videoyu durdur
                     player.pauseVideo();
                     
-                    // Kısa bir gecikme ile zaman senkronizasyonu yap
+                    // Kısa bir gecikme ile zaman senkronize et
                     setTimeout(() => {
-                        const currentTime = player.getCurrentTime();
-                        if (Math.abs(currentTime - data.currentTime) > SYNC_THRESHOLD) {
-                            console.log(`Viewer: Syncing time from ${currentTime} to ${data.currentTime}`);
-                            player.seekTo(data.currentTime, true);
-                        }
+                        player.seekTo(data.currentTime, true);
                         
-                        // Kısa bir süre sonra durum değişikliklerini tekrar dinle
+                        // Durum değişikliklerini tekrar dinle
                         setTimeout(() => {
                             setIgnoreStateChanges(false);
                         }, 500);
                     }, 200);
+                    
                 } catch (error) {
                     console.error('Pause failed:', error);
                     setIgnoreStateChanges(false);
@@ -165,30 +166,35 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
 
         socket.on('videoSeek', (data) => {
             if (!isCreator && youtubePlayerRef.current) {
-                console.log('Viewer: Received seek to', data.currentTime);
+                console.log('Viewer: Received seek to', data.currentTime, 'isPlaying:', data.isPlaying);
                 try {
                     setIsSeeking(true);
                     setIgnoreStateChanges(true);
                     const player = youtubePlayerRef.current;
-                    const wasPlaying = player.getPlayerState() === YT.PlayerState.PLAYING;
                     
-                    // Önce zaman değiştir
-                    player.seekTo(data.currentTime, true);
+                    // Önce videoyu durdur
+                    player.pauseVideo();
                     
-                    // Oynatma durumunu koru
+                    // Sonra zaman değiştir
                     setTimeout(() => {
-                        if (wasPlaying) {
-                            player.playVideo();
-                        }
+                        player.seekTo(data.currentTime, true);
                         
-                        setIsSeeking(false);
-                        setLastUpdateTime(data.currentTime);
-                        
-                        // Kısa bir süre sonra durum değişikliklerini tekrar dinle
+                        // Oynatma durumunu koru
                         setTimeout(() => {
-                            setIgnoreStateChanges(false);
-                        }, 500);
-                    }, 300);
+                            if (data.isPlaying) {
+                                player.playVideo();
+                            }
+                            
+                            setIsSeeking(false);
+                            setLastUpdateTime(data.currentTime);
+                            
+                            // Durum değişikliklerini tekrar dinle
+                            setTimeout(() => {
+                                setIgnoreStateChanges(false);
+                            }, 500);
+                        }, 200);
+                    }, 100);
+                    
                 } catch (error) {
                     console.error('Seek failed:', error);
                     setIsSeeking(false);
