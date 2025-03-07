@@ -454,7 +454,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 // Film sitelerinin embed URL'lerini düzenle
                 if (finalUrl.includes('hdfilmcehennemi')) {
                     // hdfilmcehennemi için embed URL'si
-                    const match = finalUrl.match(/\/([^\/]+)(?:-izle)?\/?$/);
+                    const match = finalUrl.match(/\/([^\/]+?)(?:-izle)?(?:\/|\?|$)/);
                     if (match && match[1]) {
                         const filmSlug = match[1].replace(/-izle$/, '');
                         // Farklı domain'leri dene
@@ -464,7 +464,13 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                             'https://www.hdfilmcehennemi.net',
                             'https://hdfilmcehennemi.tv'
                         ];
-                        finalUrl = `${domains[0]}/embed/${filmSlug}`;
+                        
+                        // URL'yi düzenle
+                        const cleanSlug = filmSlug.replace(/[^a-z0-9-]/g, '');
+                        finalUrl = `${domains[0]}/player/${cleanSlug}`;
+                        
+                        console.log('Film slug:', cleanSlug);
+                        console.log('Final URL:', finalUrl);
                     }
                 } else if (finalUrl.includes('dizibox')) {
                     // dizibox için embed URL'si

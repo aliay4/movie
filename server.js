@@ -28,6 +28,8 @@ app.get('/proxy', async (req, res) => {
             return res.status(400).json({ error: 'URL parameter is required' });
         }
 
+        console.log('Requested URL:', url);
+
         // URL'nin güvenli olduğundan emin olun
         const validDomains = [
             'hdfilmcehennemi.nl', 'www.hdfilmcehennemi.nl',
@@ -100,6 +102,12 @@ app.get('/proxy', async (req, res) => {
             })
         });
 
+        // Yanıt durumunu kontrol et
+        if (response.status === 404) {
+            console.error('404 Error - Page not found:', url);
+            return res.status(404).json({ error: 'Page not found', url: url });
+        }
+
         // İçerik türünü kontrol et
         const contentType = response.headers['content-type'] || 'text/html';
         
@@ -158,6 +166,7 @@ app.get('/proxy', async (req, res) => {
         if (error.response) {
             console.error('Response status:', error.response.status);
             console.error('Response headers:', JSON.stringify(error.response.headers, null, 2));
+            console.error('Response data:', error.response.data.toString());
         }
         res.status(500).json({ error: 'Proxy request failed', details: error.message });
     }
