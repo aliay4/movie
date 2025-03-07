@@ -457,7 +457,14 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                     const match = finalUrl.match(/\/([^\/]+)-izle\/?$/);
                     if (match && match[1]) {
                         const filmSlug = match[1];
-                        finalUrl = `https://hdfilmcehennemi.cx/embed/${filmSlug}`;
+                        // Farklı domain'leri dene
+                        const domains = [
+                            'https://www.hdfilmcehennemi.nl',
+                            'https://hdfilmcehennemi.cx',
+                            'https://www.hdfilmcehennemi.net',
+                            'https://hdfilmcehennemi.tv'
+                        ];
+                        finalUrl = `${domains[0]}/embed/${filmSlug}`;
                     }
                 } else if (finalUrl.includes('dizibox')) {
                     // dizibox için embed URL'si

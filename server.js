@@ -30,16 +30,23 @@ app.get('/proxy', async (req, res) => {
 
         // URL'nin güvenli olduğundan emin olun
         const validDomains = [
-            'hdfilmcehennemi.', 'fullhdfilmizlesene.', 'filmizle.', 'dizibox.',
-            'dizilab.', 'dizilla.', 'jetfilmizle.', 'filmmakinesi.',
-            'hdfilmcehennemi2.', 'filmmodu.', 'fullhdfilmizle.',
-            'netflix.', 'amazon.', 'hulu.', 'disney.', 'blutv.', 'exxen.',
-            'puhu.', 'mubi.', 'filmbox.'
+            'hdfilmcehennemi.nl', 'hdfilmcehennemi.cx', 'hdfilmcehennemi.net', 'hdfilmcehennemi.tv',
+            'fullhdfilmizlesene.pw', 'fullhdfilmizlesene.net', 'fullhdfilmizlesene.com',
+            'filmizle.fun', 'filmizle.pw', 'filmizle.sh',
+            'dizibox.tv', 'dizibox.pw',
+            'dizilab.pw', 'dizilab.com',
+            'dizilla.net', 'dizilla.pw',
+            'jetfilmizle.live', 'jetfilmizle.pw',
+            'filmmakinesi.pw',
+            'filmmodu.net', 'filmmodu.pw',
+            'netflix.com', 'amazon.com', 'hulu.com', 'disney.com', 'blutv.com', 'exxen.com',
+            'puhu.tv', 'mubi.com', 'filmbox.com'
         ];
 
         try {
             const urlObj = new URL(url);
-            const isValidDomain = validDomains.some(domain => urlObj.hostname.includes(domain));
+            const hostname = urlObj.hostname.toLowerCase();
+            const isValidDomain = validDomains.some(domain => hostname === domain || hostname.endsWith('.' + domain));
             if (!isValidDomain) {
                 return res.status(403).json({ error: 'Domain not allowed' });
             }
@@ -59,7 +66,9 @@ app.get('/proxy', async (req, res) => {
             'Sec-Fetch-Mode': 'navigate',
             'Sec-Fetch-Site': 'cross-site',
             'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'DNT': '1',
             'Referer': new URL(url).origin,
             'Origin': new URL(url).origin
         };
@@ -71,12 +80,16 @@ app.get('/proxy', async (req, res) => {
             method: 'get',
             url: url,
             headers: headers,
-            responseType: 'arraybuffer', // Binary data için
-            maxRedirects: 5, // Yönlendirmeleri takip et
-            timeout: 10000, // 10 saniye timeout
+            responseType: 'arraybuffer',
+            maxRedirects: 5,
+            timeout: 30000, // 30 saniye timeout
             validateStatus: function (status) {
-                return status >= 200 && status < 500; // 500'den küçük tüm durum kodlarını kabul et
-            }
+                return status >= 200 && status < 500;
+            },
+            httpsAgent: new (require('https').Agent)({
+                rejectUnauthorized: false,
+                keepAlive: true
+            })
         });
 
         // İçerik türünü kontrol et
