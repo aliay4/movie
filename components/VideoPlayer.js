@@ -29,11 +29,12 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         // Yaratıcı için olay dinleyicileri ekle
         if (isCreator) {
             console.log('Setting up creator event listeners');
+            
             // YouTube API'nin doğru event bağlama yöntemini kullanıyoruz
-            event.target.addEventListener('onStateChange', (stateEvent) => {
+            youtubePlayerRef.current.addEventListener('statechange', (stateEvent) => {
                 if (ignoreStateChanges) return;
                 
-                const playerState = stateEvent.data;
+                const playerState = youtubePlayerRef.current.getPlayerState();
                 console.log(`Creator: State changed to ${playerState}`);
                 
                 if (playerState === YT.PlayerState.PLAYING) {
@@ -496,86 +497,66 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
 
 // YouTube Player bileşeni
 function YTPlayer({ videoId, onReady, className }) {
-    const playerRef = React.useRef(null);
-    const containerRef = React.useRef(null);
-    const [playerReady, setPlayerReady] = React.useState(false);
-
-    // YouTube API'nin yüklendiğinden emin ol
+    const [playerLoaded, setPlayerLoaded] = React.useState(false);
+    
     React.useEffect(() => {
-        // YouTube API'nin yüklenip yüklenmediğini kontrol et
+        // YouTube API'yi yükle
         if (!window.YT) {
-            console.log('YouTube API not loaded yet, waiting...');
+            // Global callback fonksiyonu
+            window.onYouTubeIframeAPIReady = function() {
+                console.log('YouTube API loaded globally');
+                setPlayerLoaded(true);
+            };
+            
+            // Script ekle
             const tag = document.createElement('script');
             tag.src = 'https://www.youtube.com/iframe_api';
-            const firstScriptTag = document.getElementsByTagName('script')[0];
-            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-            
-            // API yüklendiğinde player'ı başlat
-            window.onYouTubeIframeAPIReady = () => {
-                console.log('YouTube API loaded');
-                setPlayerReady(true);
-            };
+            document.body.appendChild(tag);
         } else {
-            console.log('YouTube API already loaded');
-            setPlayerReady(true);
+            setPlayerLoaded(true);
         }
-    }, []);
-
-    // Player'ı başlat
-    React.useEffect(() => {
-        if (!playerReady || !videoId || !containerRef.current) return;
         
-        console.log('Initializing YouTube player with videoId:', videoId);
-        
-        // Eğer önceki player varsa temizle
-        if (playerRef.current) {
-            try {
-                playerRef.current.destroy();
-            } catch (error) {
-                console.error('Failed to destroy player:', error);
-            }
-            playerRef.current = null;
-        }
-
-        // Yeni player oluştur
-        try {
-            playerRef.current = new window.YT.Player(containerRef.current, {
-                videoId: videoId,
-                height: '100%',
-                width: '100%',
-                playerVars: {
-                    controls: 1,
-                    rel: 0,
-                    modestbranding: 1,
-                    enablejsapi: 1,
-                    origin: window.location.origin
-                },
-                events: {
-                    onReady: (event) => {
-                        console.log('Player ready event fired');
-                        if (onReady) onReady(event);
-                    },
-                    onError: (e) => console.error('YouTube player error:', e.data)
-                }
-            });
-        } catch (error) {
-            console.error('Failed to create YouTube player:', error);
-        }
-
         // Cleanup
         return () => {
-            if (playerRef.current) {
-                try {
-                    playerRef.current.destroy();
-                } catch (error) {
-                    console.error('Failed to destroy player:', error);
-                }
-                playerRef.current = null;
+            // Global callback'i temizle
+            if (window.onYouTubeIframeAPIReady === window.onYouTubeIframeAPIReady) {
+                window.onYouTubeIframeAPIReady = null;
             }
         };
-    }, [videoId, onReady, playerReady]);
-
+    }, []);
+    
+    // Doğrudan iframe kullanarak YouTube videosunu göster
     return (
-        <div ref={containerRef} id="youtube-container" className={className}></div>
+        <div className={className}>
+            {playerLoaded ? (
+                <iframe 
+                    id="youtube-player"
+                    width="100%" 
+                    height="100%" 
+                    src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${window.location.origin}&rel=0&modestbranding=1`}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    onLoad={(e) => {
+                        console.log('YouTube iframe loaded');
+                        if (onReady) {
+                            // YouTube Player API'yi iframe üzerinden başlat
+                            if (window.YT && window.YT.Player) {
+                                const player = new window.YT.Player('youtube-player', {
+                                    events: {
+                                        onReady: onReady,
+                                        onError: (e) => console.error('YouTube player error:', e.data)
+                                    }
+                                });
+                            }
+                        }
+                    }}
+                ></iframe>
+            ) : (
+                <div className="flex items-center justify-center h-full bg-gray-800 text-white">
+                    <p>YouTube yükleniyor...</p>
+                </div>
+            )}
+        </div>
     );
 }
