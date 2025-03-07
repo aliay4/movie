@@ -60,7 +60,8 @@ app.get('/proxy', async (req, res) => {
             'Sec-Fetch-Site': 'cross-site',
             'Sec-Fetch-User': '?1',
             'Cache-Control': 'max-age=0',
-            'Referer': new URL(url).origin
+            'Referer': new URL(url).origin,
+            'Origin': new URL(url).origin
         };
 
         console.log(`Proxy request to: ${url}`);
@@ -72,7 +73,10 @@ app.get('/proxy', async (req, res) => {
             headers: headers,
             responseType: 'arraybuffer', // Binary data için
             maxRedirects: 5, // Yönlendirmeleri takip et
-            timeout: 10000 // 10 saniye timeout
+            timeout: 10000, // 10 saniye timeout
+            validateStatus: function (status) {
+                return status >= 200 && status < 500; // 500'den küçük tüm durum kodlarını kabul et
+            }
         });
 
         // İçerik türünü kontrol et
@@ -88,22 +92,33 @@ app.get('/proxy', async (req, res) => {
 
         // CORS başlıklarını ekle
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
         res.setHeader('Content-Type', contentType);
+        res.setHeader('X-Frame-Options', 'ALLOWALL');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' *");
         
-        // HTML içeriğini değiştir - CSP ve X-Frame-Options kaldır
+        // HTML içeriğini değiştir
         if (contentType.includes('html')) {
             let html = response.data.toString('utf8');
             
-            // CSP meta etiketlerini kaldır
+            // CSP ve X-Frame-Options meta etiketlerini kaldır
             html = html.replace(/<meta[^>]*content-security-policy[^>]*>/gi, '');
-            
-            // X-Frame-Options meta etiketlerini kaldır
             html = html.replace(/<meta[^>]*x-frame-options[^>]*>/gi, '');
             
             // Bağlantıları mutlak URL'lere dönüştür
             const baseUrl = new URL(url).origin;
             html = html.replace(/src="\/([^"]*)"/g, `src="${baseUrl}/$1"`);
             html = html.replace(/href="\/([^"]*)"/g, `href="${baseUrl}/$1"`);
+            
+            // Frame busting kodlarını etkisiz hale getir
+            html = html.replace(/if\s*\(\s*(?:top|window|self|parent)\.location\s*!==?\s*(?:top|window|self|parent)\.location\)\s*{[^}]*}/gi, '');
+            html = html.replace(/if\s*\(\s*(?:top|window|self|parent)\s*!==?\s*(?:top|window|self|parent)\)\s*{[^}]*}/gi, '');
+            
+            // Video oynatıcıyı bul ve düzenle
+            html = html.replace(/<video[^>]*>([\s\S]*?)<\/video>/gi, (match) => {
+                return match.replace(/controls(?=[\s>])/gi, 'controls playsinline');
+            });
             
             return res.send(html);
         }

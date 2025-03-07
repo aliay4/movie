@@ -451,7 +451,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             else if (isMovieSiteUrl(finalUrl)) {
                 type = 'moviesite';
                 
-                // Bazı film siteleri için embed URL'sini kullan
+                // Film sitelerinin embed URL'lerini düzenle
                 if (finalUrl.includes('hdfilmcehennemi')) {
                     // hdfilmcehennemi için embed URL'si
                     const match = finalUrl.match(/\/([^\/]+)-izle\/?$/);
@@ -468,6 +468,25 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                         const bolumSlug = match[3];
                         finalUrl = `https://www.dizibox.tv/embed/${diziSlug}/${sezonSlug}/${bolumSlug}`;
                     }
+                } else if (finalUrl.includes('filmizle')) {
+                    // filmizle için embed URL'si
+                    const match = finalUrl.match(/\/([^\/]+)(?:\/[^\/]+)?$/);
+                    if (match && match[1]) {
+                        const filmSlug = match[1];
+                        finalUrl = `https://www.filmizle.fun/embed/${filmSlug}`;
+                    }
+                } else if (finalUrl.includes('fullhdfilmizlesene')) {
+                    // fullhdfilmizlesene için embed URL'si
+                    const match = finalUrl.match(/\/([^\/]+)-izle\/?$/);
+                    if (match && match[1]) {
+                        const filmSlug = match[1];
+                        finalUrl = `https://www.fullhdfilmizlesene.pw/player/${filmSlug}`;
+                    }
+                }
+                
+                // Eğer URL bir embed URL'si değilse, orijinal URL'yi kullan
+                if (!finalUrl.includes('/embed/') && !finalUrl.includes('/player/')) {
+                    console.log('Film sitesi için embed URL\'si bulunamadı, orijinal URL kullanılıyor');
                 }
                 
                 console.log('Film sitesi URL\'si tespit edildi:', finalUrl);
@@ -512,18 +531,21 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         if (videoType === 'moviesite') {
             return (
                 <div className="w-full aspect-video relative">
-                    <iframe
-                        src={`/proxy?url=${encodeURIComponent(videoUrl)}`}
-                        className="w-full h-full"
-                        frameBorder="0"
-                        allowFullScreen
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-                        referrerPolicy="no-referrer"
-                    ></iframe>
+                    <div className="absolute inset-0">
+                        <iframe
+                            src={`/proxy?url=${encodeURIComponent(videoUrl)}`}
+                            className="w-full h-full"
+                            frameBorder="0"
+                            allowFullScreen
+                            allow="autoplay; encrypted-media; picture-in-picture"
+                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
+                            referrerPolicy="no-referrer"
+                            style={{ zIndex: 1 }}
+                        ></iframe>
+                    </div>
                     
                     {/* Video Kontrolleri */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-gray-800 bg-opacity-90 p-4">
+                    <div className="absolute bottom-0 left-0 right-0 bg-gray-800 bg-opacity-90 p-4" style={{ zIndex: 2 }}>
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center">
                                 {isPlaying ? (
