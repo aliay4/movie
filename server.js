@@ -47,30 +47,75 @@ app.get('/proxy', async (req, res) => {
             return res.status(400).json({ error: 'Invalid URL' });
         }
 
+        // Daha gerçekçi tarayıcı başlıkları
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'iframe',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'cross-site',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
+            'Referer': new URL(url).origin
+        };
+
+        console.log(`Proxy request to: ${url}`);
+        
         // İsteği yap ve yanıtı ilet
-        const response = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Referer': new URL(url).origin
-            },
-            responseType: 'stream'
+        const response = await axios({
+            method: 'get',
+            url: url,
+            headers: headers,
+            responseType: 'arraybuffer', // Binary data için
+            maxRedirects: 5, // Yönlendirmeleri takip et
+            timeout: 10000 // 10 saniye timeout
         });
 
+        // İçerik türünü kontrol et
+        const contentType = response.headers['content-type'] || 'text/html';
+        
         // Yanıt başlıklarını ayarla
         Object.keys(response.headers).forEach(key => {
             // CORS ve güvenlik başlıklarını hariç tut
-            if (!['x-frame-options', 'content-security-policy', 'access-control-allow-origin'].includes(key.toLowerCase())) {
+            if (!['x-frame-options', 'content-security-policy', 'access-control-allow-origin', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())) {
                 res.setHeader(key, response.headers[key]);
             }
         });
 
         // CORS başlıklarını ekle
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', contentType);
         
-        // Yanıtı ilet
-        response.data.pipe(res);
+        // HTML içeriğini değiştir - CSP ve X-Frame-Options kaldır
+        if (contentType.includes('html')) {
+            let html = response.data.toString('utf8');
+            
+            // CSP meta etiketlerini kaldır
+            html = html.replace(/<meta[^>]*content-security-policy[^>]*>/gi, '');
+            
+            // X-Frame-Options meta etiketlerini kaldır
+            html = html.replace(/<meta[^>]*x-frame-options[^>]*>/gi, '');
+            
+            // Bağlantıları mutlak URL'lere dönüştür
+            const baseUrl = new URL(url).origin;
+            html = html.replace(/src="\/([^"]*)"/g, `src="${baseUrl}/$1"`);
+            html = html.replace(/href="\/([^"]*)"/g, `href="${baseUrl}/$1"`);
+            
+            return res.send(html);
+        }
+        
+        // Binary içerik için
+        res.end(response.data);
     } catch (error) {
         console.error('Proxy error:', error.message);
+        if (error.response) {
+            console.error('Response status:', error.response.status);
+            console.error('Response headers:', JSON.stringify(error.response.headers, null, 2));
+        }
         res.status(500).json({ error: 'Proxy request failed', details: error.message });
     }
 });

@@ -404,7 +404,26 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             // Film sitesi URL kontrolü
             else if (isMovieSiteUrl(finalUrl)) {
                 type = 'moviesite';
-                // URL'yi olduğu gibi kullan
+                
+                // Bazı film siteleri için embed URL'sini kullan
+                if (finalUrl.includes('hdfilmcehennemi')) {
+                    // hdfilmcehennemi için embed URL'si
+                    const match = finalUrl.match(/\/([^\/]+)-izle\/?$/);
+                    if (match && match[1]) {
+                        const filmSlug = match[1];
+                        finalUrl = `https://hdfilmcehennemi.cx/embed/${filmSlug}`;
+                    }
+                } else if (finalUrl.includes('dizibox')) {
+                    // dizibox için embed URL'si
+                    const match = finalUrl.match(/\/([^\/]+)\/([^\/]+)\/([^\/]+)\/?$/);
+                    if (match && match[1] && match[2] && match[3]) {
+                        const diziSlug = match[1];
+                        const sezonSlug = match[2];
+                        const bolumSlug = match[3];
+                        finalUrl = `https://www.dizibox.tv/embed/${diziSlug}/${sezonSlug}/${bolumSlug}`;
+                    }
+                }
+                
                 console.log('Film sitesi URL\'si tespit edildi:', finalUrl);
             }
 
@@ -448,11 +467,13 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             return (
                 <div className="w-full aspect-video relative">
                     <iframe
-                        src={`/proxy?url=${encodeURIComponent(videoUrl)}`}
+                        src={videoUrl}
                         className="w-full h-full"
                         frameBorder="0"
                         allowFullScreen
                         allow="autoplay; encrypted-media; picture-in-picture"
+                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                        referrerPolicy="no-referrer"
                     ></iframe>
                     
                     {isCreator && (
@@ -491,6 +512,12 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                         <p className="font-bold">Not:</p>
                         <p>Film sitesi videoları için otomatik senkronizasyon mevcut değildir. Herkesin manuel olarak aynı noktaya gitmesi gerekir.</p>
                         <p>Parti yaratıcısı "Senkronize Et" butonunu kullanarak zaman damgası paylaşabilir.</p>
+                        <p className="mt-2 text-red-600 font-bold">Eğer video yüklenmediyse veya "refused to connect" hatası alıyorsanız:</p>
+                        <ol className="list-decimal ml-5 mt-1">
+                            <li>Film sitesinin doğrudan embed URL'sini kullanmayı deneyin (örn: hdfilmcehennemi.cx/embed/film-adi)</li>
+                            <li>Farklı bir film sitesi deneyin</li>
+                            <li>YouTube veya doğrudan video bağlantısı kullanın</li>
+                        </ol>
                     </div>
                 </div>
             );
