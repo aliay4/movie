@@ -465,59 +465,87 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         // Film sitesi embed desteği
         if (videoType === 'moviesite') {
             return (
-                <div className="w-full aspect-video relative">
-                    <iframe
-                        src={videoUrl}
-                        className="w-full h-full"
-                        frameBorder="0"
-                        allowFullScreen
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-                        referrerPolicy="no-referrer"
-                    ></iframe>
-                    
-                    {isCreator && (
-                        <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 p-2 rounded-lg">
-                            <button 
-                                onClick={() => {
-                                    const timestamp = prompt("Şu anki zaman damgasını girin (örn: 1:30:45):");
-                                    if (timestamp) {
-                                        // Zaman damgasını saniyeye çevir
-                                        const parts = timestamp.split(':').map(Number);
-                                        let seconds = 0;
-                                        if (parts.length === 3) { // saat:dakika:saniye
-                                            seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                                        } else if (parts.length === 2) { // dakika:saniye
-                                            seconds = parts[0] * 60 + parts[1];
-                                        } else {
-                                            seconds = parts[0];
-                                        }
-                                        
-                                        // Zaman damgasını gönder
-                                        socket.emit('manualSync', {
-                                            partyCode,
-                                            timestamp: seconds,
-                                            message: `Film ${formatTime(seconds)} noktasına senkronize edildi.`
-                                        });
-                                    }
-                                }}
-                                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                <div className="w-full aspect-video relative bg-gray-800 text-white p-8">
+                    <div className="flex flex-col items-center justify-center h-full">
+                        <h3 className="text-2xl mb-4">Film Sitesi Modu</h3>
+                        
+                        <p className="mb-4 text-center">
+                            Film siteleri genellikle iframe içinde gösterilmeye izin vermez. 
+                            Aşağıdaki butona tıklayarak filmi yeni bir sekmede açabilirsiniz.
+                        </p>
+                        
+                        <div className="flex gap-4 mb-6">
+                            <a 
+                                href={videoUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center"
                             >
-                                <i className="fas fa-sync-alt mr-1"></i> Senkronize Et
-                            </button>
+                                <i className="fas fa-external-link-alt mr-2"></i>
+                                Filmi Yeni Sekmede Aç
+                            </a>
                         </div>
-                    )}
-                    
-                    <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2">
-                        <p className="font-bold">Not:</p>
-                        <p>Film sitesi videoları için otomatik senkronizasyon mevcut değildir. Herkesin manuel olarak aynı noktaya gitmesi gerekir.</p>
-                        <p>Parti yaratıcısı "Senkronize Et" butonunu kullanarak zaman damgası paylaşabilir.</p>
-                        <p className="mt-2 text-red-600 font-bold">Eğer video yüklenmediyse veya "refused to connect" hatası alıyorsanız:</p>
-                        <ol className="list-decimal ml-5 mt-1">
-                            <li>Film sitesinin doğrudan embed URL'sini kullanmayı deneyin (örn: hdfilmcehennemi.cx/embed/film-adi)</li>
-                            <li>Farklı bir film sitesi deneyin</li>
-                            <li>YouTube veya doğrudan video bağlantısı kullanın</li>
-                        </ol>
+                        
+                        <div className="w-full max-w-md">
+                            <div className="bg-gray-700 p-4 rounded-lg mb-4">
+                                <h4 className="font-bold mb-2">Manuel Senkronizasyon</h4>
+                                
+                                {isCreator ? (
+                                    <div>
+                                        <p className="mb-2">Parti yaratıcısı olarak, herkesin aynı noktada olmasını sağlamak için zaman damgası gönderebilirsiniz:</p>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                placeholder="ör: 1:30:45"
+                                                className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white"
+                                                id="syncTimeInput"
+                                            />
+                                            <button 
+                                                onClick={() => {
+                                                    const timestamp = document.getElementById('syncTimeInput').value;
+                                                    if (timestamp) {
+                                                        // Zaman damgasını saniyeye çevir
+                                                        const parts = timestamp.split(':').map(Number);
+                                                        let seconds = 0;
+                                                        if (parts.length === 3) { // saat:dakika:saniye
+                                                            seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                                                        } else if (parts.length === 2) { // dakika:saniye
+                                                            seconds = parts[0] * 60 + parts[1];
+                                                        } else {
+                                                            seconds = parts[0];
+                                                        }
+                                                        
+                                                        // Zaman damgasını gönder
+                                                        socket.emit('manualSync', {
+                                                            partyCode,
+                                                            timestamp: seconds,
+                                                            message: `Film ${formatTime(seconds)} noktasına senkronize edildi.`
+                                                        });
+                                                        
+                                                        // Input'u temizle
+                                                        document.getElementById('syncTimeInput').value = '';
+                                                    }
+                                                }}
+                                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                            >
+                                                <i className="fas fa-sync-alt mr-1"></i> Senkronize Et
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p>Parti yaratıcısı, herkesin aynı noktada olmasını sağlamak için zaman damgası gönderecektir. Lütfen sohbeti takip edin.</p>
+                                )}
+                            </div>
+                            
+                            <div className="bg-yellow-800 bg-opacity-50 p-4 rounded-lg">
+                                <h4 className="font-bold mb-2">Öneriler:</h4>
+                                <ul className="list-disc ml-5">
+                                    <li>Filmi açtıktan sonra, parti yaratıcısının senkronizasyon mesajlarını bekleyin</li>
+                                    <li>Senkronizasyon mesajı geldiğinde, filmi belirtilen zamana getirin</li>
+                                    <li>Alternatif olarak, YouTube videoları tam senkronizasyon desteği sunar</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
             );

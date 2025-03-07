@@ -144,9 +144,23 @@ io.on('connection', (socket) => {
   });
 
   // Manuel senkronizasyon olayı
-  socket.on('manualSync', (data) => {
+  socket.on('manualSync', async (data) => {
     socket.to(data.partyCode).emit('manualSync', data);
     console.log(`Manuel senkronizasyon: ${data.partyCode}, zaman: ${data.timestamp}`);
+    
+    // Senkronizasyon mesajını sohbete ekle
+    try {
+      const message = {
+        partyCode: data.partyCode,
+        sender: 'Sistem',
+        text: data.message || `Film ${formatTime(data.timestamp)} noktasına senkronize edildi.`
+      };
+      
+      await Message.create(message);
+      console.log('Senkronizasyon mesajı sohbete eklendi');
+    } catch (error) {
+      console.error('Senkronizasyon mesajı eklenirken hata:', error);
+    }
   });
 
   socket.on('endParty', (partyCode) => {
@@ -289,6 +303,19 @@ app.get('/api/messages/:partyCode', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// Zaman formatı yardımcı fonksiyonu
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  
+  const hDisplay = h > 0 ? h + ":" : "";
+  const mDisplay = m < 10 ? "0" + m + ":" : m + ":";
+  const sDisplay = s < 10 ? "0" + s : s;
+  
+  return hDisplay + mDisplay + sDisplay;
+}
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {

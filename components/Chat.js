@@ -42,22 +42,43 @@ function Chat({ partyCode, userName }) {
         }
     };
 
+    // Mesaj içeriğine göre özel stil belirle
+    const getMessageStyle = (msg) => {
+        // Senkronizasyon mesajı kontrolü
+        if (msg.text.includes('senkronize edildi') || msg.text.toLowerCase().includes('sync')) {
+            return 'bg-green-700 border-l-4 border-green-500';
+        }
+        
+        // Kendi mesajlarımız
+        if (msg.sender === userName) {
+            return 'bg-blue-700';
+        }
+        
+        // Diğer mesajlar
+        return 'bg-gray-700';
+    };
+
     return (
         <div data-name="chat" className="bg-gray-800 text-white p-4 rounded-lg">
-            <div data-name="chat-messages" ref={chatRef} className="chat-container">
+            <h3 className="text-xl mb-4 font-bold">Sohbet</h3>
+            <div data-name="chat-messages" ref={chatRef} className="chat-container h-96 overflow-y-auto mb-4 p-2 border border-gray-700 rounded">
                 {isLoading ? (
                     <div className="flex items-center justify-center h-32">
                         <i className="fas fa-spinner fa-spin"></i>
+                    </div>
+                ) : messages.length === 0 ? (
+                    <div className="text-center text-gray-500 py-4">
+                        Henüz mesaj yok. İlk mesajı siz gönderin!
                     </div>
                 ) : (
                     messages.map((msg) => (
                         <div
                             key={msg.id}
                             data-name="chat-message"
-                            className={`chat-message ${msg.sender === userName ? 'bg-blue-700' : 'bg-gray-700'}`}
+                            className={`chat-message p-3 rounded mb-2 ${getMessageStyle(msg)}`}
                         >
                             <div className="font-bold">{msg.sender}</div>
-                            <div>{msg.text}</div>
+                            <div className="my-1">{msg.text}</div>
                             <div className="text-xs text-gray-400">
                                 {new Date(msg.timestamp).toLocaleTimeString()}
                             </div>
