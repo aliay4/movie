@@ -55,7 +55,7 @@ app.get('/proxy', async (req, res) => {
             return res.status(400).json({ error: 'Invalid URL' });
         }
 
-        // Daha gerçekçi tarayıcı başlıkları
+        // Film sitesi için özel başlıklar
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -72,7 +72,10 @@ app.get('/proxy', async (req, res) => {
             'DNT': '1',
             'Referer': url,
             'Origin': new URL(url).origin,
-            'Host': new URL(url).host
+            'Host': new URL(url).host,
+            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"'
         };
 
         console.log(`Proxy request to: ${url}`);
@@ -86,6 +89,7 @@ app.get('/proxy', async (req, res) => {
             responseType: 'arraybuffer',
             maxRedirects: 5,
             timeout: 30000,
+            decompress: true,
             validateStatus: function (status) {
                 return status < 500;
             },
@@ -102,10 +106,11 @@ app.get('/proxy', async (req, res) => {
         // CORS başlıklarını ekle
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Referer');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
         res.setHeader('Content-Type', contentType);
         res.setHeader('X-Frame-Options', 'ALLOWALL');
-        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' *");
+        res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-ancestors * 'self'");
         
         // HTML içeriğini değiştir
         if (contentType.includes('html')) {
@@ -121,6 +126,7 @@ app.get('/proxy', async (req, res) => {
             html = html.replace(/top\.location\s*=\s*self\.location/gi, '');
             html = html.replace(/parent\.location\s*=\s*self\.location/gi, '');
             html = html.replace(/window\.location\s*=\s*self\.location/gi, '');
+            html = html.replace(/location\s*=\s*document\.referrer/gi, '');
             
             // Video oynatıcıyı bul ve düzenle
             html = html.replace(/<video[^>]*>([\s\S]*?)<\/video>/gi, (match) => {
@@ -130,7 +136,16 @@ app.get('/proxy', async (req, res) => {
             // İframe içeriğini düzenle
             html = html.replace(/<iframe[^>]*>/gi, (match) => {
                 return match.replace(/sandbox="[^"]*"/gi, '')
-                    .replace(/>/g, ' sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation">');
+                    .replace(/>/g, ' sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation">');
+            });
+            
+            // Script etiketlerini düzenle
+            html = html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match, content) => {
+                // Frame busting kodlarını içeren scriptleri kaldır
+                if (content.includes('top.location') || content.includes('parent.location')) {
+                    return '';
+                }
+                return match;
             });
             
             return res.send(html);

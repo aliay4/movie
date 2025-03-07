@@ -464,7 +464,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                             'https://www.hdfilmcehennemi.net',
                             'https://hdfilmcehennemi.tv'
                         ];
-                        finalUrl = `${domains[0]}/player/${filmSlug}`;
+                        finalUrl = `${domains[0]}/embed/${filmSlug}`;
                     }
                 } else if (finalUrl.includes('dizibox')) {
                     // dizibox için embed URL'si
@@ -544,10 +544,11 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                             className="w-full h-full"
                             frameBorder="0"
                             allowFullScreen
-                            allow="autoplay; encrypted-media; picture-in-picture"
+                            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
                             referrerPolicy="no-referrer"
                             style={{ zIndex: 1 }}
+                            loading="eager"
                         ></iframe>
                     </div>
                     
