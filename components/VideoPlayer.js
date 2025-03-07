@@ -14,7 +14,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
     const [lastSyncTime, setLastSyncTime] = React.useState(0);
     const [ignoreStateChanges, setIgnoreStateChanges] = React.useState(false);
     const SYNC_THRESHOLD = 1; // 1 saniyelik senkronizasyon eşiği
-    const SYNC_INTERVAL = 500; // 500ms kontrol aralığı (300ms'den arttırıldı)
+    const SYNC_INTERVAL = 1000; // 1000ms kontrol aralığı
 
     // YouTube Player API için event handlers
     const onYouTubePlayerReady = React.useCallback((event) => {
@@ -26,7 +26,34 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             clearInterval(syncInterval);
         }
         
-        // Yeni senkronizasyon interval'ı başlat
+        // Yaratıcı için olay dinleyicileri ekle
+        if (isCreator) {
+            // onStateChange olayını dinle
+            event.target.addEventListener('onStateChange', (e) => {
+                if (ignoreStateChanges) return;
+                
+                const playerState = e.data;
+                console.log(`Creator: State changed to ${playerState}`);
+                
+                if (playerState === YT.PlayerState.PLAYING) {
+                    socket.emit('videoPlay', {
+                        partyCode,
+                        currentTime: event.target.getCurrentTime(),
+                        timestamp: Date.now()
+                    });
+                } else if (playerState === YT.PlayerState.PAUSED) {
+                    socket.emit('videoPause', {
+                        partyCode,
+                        currentTime: event.target.getCurrentTime(),
+                        timestamp: Date.now()
+                    });
+                }
+                
+                setLastPlayerState(playerState);
+            });
+        }
+        
+        // Yeni senkronizasyon interval'ı başlat - sadece seek işlemleri için
         const newInterval = setInterval(() => {
             if (!youtubePlayerRef.current) return;
             
@@ -35,34 +62,13 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 const currentTime = player.getCurrentTime();
                 const playerState = player.getPlayerState();
                 
-                // Yaratıcı için event gönderme
-                if (isCreator && !ignoreStateChanges) {
-                    // Durum değişikliği kontrolü
-                    if (playerState !== lastPlayerState) {
-                        console.log(`Creator: State changed from ${lastPlayerState} to ${playerState}`);
-                        
-                        if (playerState === YT.PlayerState.PLAYING) {
-                            socket.emit('videoPlay', {
-                                partyCode,
-                                currentTime,
-                                timestamp: Date.now()
-                            });
-                        } else if (playerState === YT.PlayerState.PAUSED) {
-                            socket.emit('videoPause', {
-                                partyCode,
-                                currentTime,
-                                timestamp: Date.now()
-                            });
-                        }
-                        
-                        setLastPlayerState(playerState);
-                    }
-                    
-                    // Seek kontrolü - sadece oynatılıyorsa ve son senkronizasyondan beri yeterli zaman geçtiyse
+                // Yaratıcı için seek kontrolü
+                if (isCreator && !ignoreStateChanges && playerState === YT.PlayerState.PLAYING) {
                     const timeSinceLastSync = Date.now() - lastSyncTime;
-                    if (playerState === YT.PlayerState.PLAYING && 
-                        Math.abs(currentTime - lastUpdateTime) > SYNC_THRESHOLD && 
-                        timeSinceLastSync > 2000) { // 1000ms'den 2000ms'ye çıkarıldı
+                    
+                    // Sadece oynatılıyorsa ve belirli bir süre geçtiyse seek kontrolü yap
+                    if (Math.abs(currentTime - lastUpdateTime) > SYNC_THRESHOLD && 
+                        timeSinceLastSync > 3000) {
                         
                         console.log(`Creator: Detected seek to ${currentTime}`);
                         socket.emit('videoSeek', {
@@ -82,7 +88,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         
         setSyncInterval(newInterval);
         
-    }, [isCreator, socket, partyCode, lastPlayerState, lastUpdateTime, lastSyncTime, syncInterval, ignoreStateChanges]);
+    }, [isCreator, socket, partyCode, lastUpdateTime, lastSyncTime, syncInterval, ignoreStateChanges]);
 
     // Cleanup effect
     React.useEffect(() => {
@@ -105,23 +111,19 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                     const player = youtubePlayerRef.current;
                     const currentTime = player.getCurrentTime();
                     
-                    // Zaman farkı kontrolü - önce zaman senkronize et, sonra oynat
+                    // Zaman farkı kontrolü
                     if (Math.abs(currentTime - data.currentTime) > SYNC_THRESHOLD) {
                         console.log(`Viewer: Syncing time from ${currentTime} to ${data.currentTime}`);
                         player.seekTo(data.currentTime, true);
-                        
-                        // Zaman senkronizasyonundan sonra kısa bir gecikme ile oynat
-                        setTimeout(() => {
-                            player.playVideo();
-                            setLastPlayerState(YT.PlayerState.PLAYING);
-                            setTimeout(() => setIgnoreStateChanges(false), 500);
-                        }, 200);
-                    } else {
-                        // Zaman farkı yoksa doğrudan oynat
-                        player.playVideo();
-                        setLastPlayerState(YT.PlayerState.PLAYING);
-                        setTimeout(() => setIgnoreStateChanges(false), 500);
                     }
+                    
+                    // Doğrudan oynat
+                    player.playVideo();
+                    
+                    // Kısa bir süre sonra durum değişikliklerini tekrar dinle
+                    setTimeout(() => {
+                        setIgnoreStateChanges(false);
+                    }, 1000);
                 } catch (error) {
                     console.error('Play failed:', error);
                     setIgnoreStateChanges(false);
@@ -135,19 +137,23 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                 try {
                     setIgnoreStateChanges(true);
                     const player = youtubePlayerRef.current;
-                    const currentTime = player.getCurrentTime();
                     
                     // Önce videoyu durdur
                     player.pauseVideo();
                     
-                    // Zaman farkı kontrolü - önemli: durdurduktan sonra yap
-                    if (Math.abs(currentTime - data.currentTime) > SYNC_THRESHOLD) {
-                        console.log(`Viewer: Syncing time from ${currentTime} to ${data.currentTime}`);
-                        player.seekTo(data.currentTime, true);
-                    }
-                    
-                    setLastPlayerState(YT.PlayerState.PAUSED);
-                    setTimeout(() => setIgnoreStateChanges(false), 500);
+                    // Kısa bir gecikme ile zaman senkronizasyonu yap
+                    setTimeout(() => {
+                        const currentTime = player.getCurrentTime();
+                        if (Math.abs(currentTime - data.currentTime) > SYNC_THRESHOLD) {
+                            console.log(`Viewer: Syncing time from ${currentTime} to ${data.currentTime}`);
+                            player.seekTo(data.currentTime, true);
+                        }
+                        
+                        // Kısa bir süre sonra durum değişikliklerini tekrar dinle
+                        setTimeout(() => {
+                            setIgnoreStateChanges(false);
+                        }, 500);
+                    }, 200);
                 } catch (error) {
                     console.error('Pause failed:', error);
                     setIgnoreStateChanges(false);
@@ -162,8 +168,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                     setIsSeeking(true);
                     setIgnoreStateChanges(true);
                     const player = youtubePlayerRef.current;
-                    const currentState = player.getPlayerState();
-                    const wasPlaying = currentState === YT.PlayerState.PLAYING;
+                    const wasPlaying = player.getPlayerState() === YT.PlayerState.PLAYING;
                     
                     // Önce zaman değiştir
                     player.seekTo(data.currentTime, true);
@@ -172,12 +177,15 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
                     setTimeout(() => {
                         if (wasPlaying) {
                             player.playVideo();
-                        } else {
-                            player.pauseVideo();
                         }
+                        
                         setIsSeeking(false);
                         setLastUpdateTime(data.currentTime);
-                        setTimeout(() => setIgnoreStateChanges(false), 500);
+                        
+                        // Kısa bir süre sonra durum değişikliklerini tekrar dinle
+                        setTimeout(() => {
+                            setIgnoreStateChanges(false);
+                        }, 500);
                     }, 300);
                 } catch (error) {
                     console.error('Seek failed:', error);
@@ -497,13 +505,32 @@ function YTPlayer({ videoId, onReady, className }) {
                 playerVars: {
                     controls: 1,
                     rel: 0,
-                    modestbranding: 1
+                    modestbranding: 1,
+                    enablejsapi: 1
                 },
                 events: {
                     onReady: onReady
                 }
             });
+        } else if (playerRef.current && videoId) {
+            // Video ID değişirse, yeni videoyu yükle
+            try {
+                playerRef.current.loadVideoById(videoId);
+            } catch (error) {
+                console.error('Failed to load new video:', error);
+            }
         }
+
+        // Cleanup
+        return () => {
+            if (playerRef.current) {
+                try {
+                    playerRef.current.destroy();
+                } catch (error) {
+                    console.error('Failed to destroy player:', error);
+                }
+            }
+        };
     }, [videoId, onReady]);
 
     return (
