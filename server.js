@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const axios = require('axios');
 
 const app = express();
 const httpServer = createServer(app);
@@ -18,6 +19,61 @@ const io = new Server(httpServer, {
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
+
+// Proxy endpoint for movie sites
+app.get('/proxy', async (req, res) => {
+    try {
+        const url = req.query.url;
+        if (!url) {
+            return res.status(400).json({ error: 'URL parameter is required' });
+        }
+
+        // URL'nin güvenli olduğundan emin olun
+        const validDomains = [
+            'hdfilmcehennemi.', 'fullhdfilmizlesene.', 'filmizle.', 'dizibox.',
+            'dizilab.', 'dizilla.', 'jetfilmizle.', 'filmmakinesi.',
+            'hdfilmcehennemi2.', 'filmmodu.', 'fullhdfilmizle.',
+            'netflix.', 'amazon.', 'hulu.', 'disney.', 'blutv.', 'exxen.',
+            'puhu.', 'mubi.', 'filmbox.'
+        ];
+
+        try {
+            const urlObj = new URL(url);
+            const isValidDomain = validDomains.some(domain => urlObj.hostname.includes(domain));
+            if (!isValidDomain) {
+                return res.status(403).json({ error: 'Domain not allowed' });
+            }
+        } catch (error) {
+            return res.status(400).json({ error: 'Invalid URL' });
+        }
+
+        // İsteği yap ve yanıtı ilet
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Referer': new URL(url).origin
+            },
+            responseType: 'stream'
+        });
+
+        // Yanıt başlıklarını ayarla
+        Object.keys(response.headers).forEach(key => {
+            // CORS ve güvenlik başlıklarını hariç tut
+            if (!['x-frame-options', 'content-security-policy', 'access-control-allow-origin'].includes(key.toLowerCase())) {
+                res.setHeader(key, response.headers[key]);
+            }
+        });
+
+        // CORS başlıklarını ekle
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        
+        // Yanıtı ilet
+        response.data.pipe(res);
+    } catch (error) {
+        console.error('Proxy error:', error.message);
+        res.status(500).json({ error: 'Proxy request failed', details: error.message });
+    }
+});
 
 // Socket.IO events
 io.on('connection', (socket) => {

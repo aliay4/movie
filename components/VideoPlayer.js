@@ -448,7 +448,7 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
             return (
                 <div className="w-full aspect-video relative">
                     <iframe
-                        src={videoUrl}
+                        src={`/proxy?url=${encodeURIComponent(videoUrl)}`}
                         className="w-full h-full"
                         frameBorder="0"
                         allowFullScreen
