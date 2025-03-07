@@ -30,23 +30,24 @@ app.get('/proxy', async (req, res) => {
 
         // URL'nin güvenli olduğundan emin olun
         const validDomains = [
-            'hdfilmcehennemi.nl', 'hdfilmcehennemi.cx', 'hdfilmcehennemi.net', 'hdfilmcehennemi.tv',
-            'fullhdfilmizlesene.pw', 'fullhdfilmizlesene.net', 'fullhdfilmizlesene.com',
-            'filmizle.fun', 'filmizle.pw', 'filmizle.sh',
-            'dizibox.tv', 'dizibox.pw',
-            'dizilab.pw', 'dizilab.com',
-            'dizilla.net', 'dizilla.pw',
-            'jetfilmizle.live', 'jetfilmizle.pw',
-            'filmmakinesi.pw',
-            'filmmodu.net', 'filmmodu.pw',
-            'netflix.com', 'amazon.com', 'hulu.com', 'disney.com', 'blutv.com', 'exxen.com',
-            'puhu.tv', 'mubi.com', 'filmbox.com'
+            'hdfilmcehennemi.nl', 'www.hdfilmcehennemi.nl',
+            'hdfilmcehennemi.cx', 'www.hdfilmcehennemi.cx',
+            'hdfilmcehennemi.net', 'www.hdfilmcehennemi.net',
+            'hdfilmcehennemi.tv', 'www.hdfilmcehennemi.tv',
+            'fullhdfilmizlesene.pw', 'www.fullhdfilmizlesene.pw',
+            'fullhdfilmizlesene.net', 'www.fullhdfilmizlesene.net',
+            'fullhdfilmizlesene.com', 'www.fullhdfilmizlesene.com',
+            'filmizle.fun', 'www.filmizle.fun',
+            'filmizle.pw', 'www.filmizle.pw',
+            'filmizle.sh', 'www.filmizle.sh',
+            'dizibox.tv', 'www.dizibox.tv',
+            'dizibox.pw', 'www.dizibox.pw'
         ];
 
         try {
             const urlObj = new URL(url);
             const hostname = urlObj.hostname.toLowerCase();
-            const isValidDomain = validDomains.some(domain => hostname === domain || hostname.endsWith('.' + domain));
+            const isValidDomain = validDomains.includes(hostname);
             if (!isValidDomain) {
                 return res.status(403).json({ error: 'Domain not allowed' });
             }
@@ -69,11 +70,13 @@ app.get('/proxy', async (req, res) => {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
             'DNT': '1',
-            'Referer': new URL(url).origin,
-            'Origin': new URL(url).origin
+            'Referer': url,
+            'Origin': new URL(url).origin,
+            'Host': new URL(url).host
         };
 
         console.log(`Proxy request to: ${url}`);
+        console.log('Request headers:', headers);
         
         // İsteği yap ve yanıtı ilet
         const response = await axios({
@@ -82,31 +85,24 @@ app.get('/proxy', async (req, res) => {
             headers: headers,
             responseType: 'arraybuffer',
             maxRedirects: 5,
-            timeout: 30000, // 30 saniye timeout
+            timeout: 30000,
             validateStatus: function (status) {
-                return status >= 200 && status < 500;
+                return status < 500;
             },
             httpsAgent: new (require('https').Agent)({
                 rejectUnauthorized: false,
-                keepAlive: true
+                keepAlive: true,
+                timeout: 30000
             })
         });
 
         // İçerik türünü kontrol et
         const contentType = response.headers['content-type'] || 'text/html';
         
-        // Yanıt başlıklarını ayarla
-        Object.keys(response.headers).forEach(key => {
-            // CORS ve güvenlik başlıklarını hariç tut
-            if (!['x-frame-options', 'content-security-policy', 'access-control-allow-origin', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())) {
-                res.setHeader(key, response.headers[key]);
-            }
-        });
-
         // CORS başlıklarını ekle
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Referer');
         res.setHeader('Content-Type', contentType);
         res.setHeader('X-Frame-Options', 'ALLOWALL');
         res.setHeader('Content-Security-Policy', "frame-ancestors 'self' *");
@@ -119,18 +115,22 @@ app.get('/proxy', async (req, res) => {
             html = html.replace(/<meta[^>]*content-security-policy[^>]*>/gi, '');
             html = html.replace(/<meta[^>]*x-frame-options[^>]*>/gi, '');
             
-            // Bağlantıları mutlak URL'lere dönüştür
-            const baseUrl = new URL(url).origin;
-            html = html.replace(/src="\/([^"]*)"/g, `src="${baseUrl}/$1"`);
-            html = html.replace(/href="\/([^"]*)"/g, `href="${baseUrl}/$1"`);
-            
             // Frame busting kodlarını etkisiz hale getir
             html = html.replace(/if\s*\(\s*(?:top|window|self|parent)\.location\s*!==?\s*(?:top|window|self|parent)\.location\)\s*{[^}]*}/gi, '');
             html = html.replace(/if\s*\(\s*(?:top|window|self|parent)\s*!==?\s*(?:top|window|self|parent)\)\s*{[^}]*}/gi, '');
+            html = html.replace(/top\.location\s*=\s*self\.location/gi, '');
+            html = html.replace(/parent\.location\s*=\s*self\.location/gi, '');
+            html = html.replace(/window\.location\s*=\s*self\.location/gi, '');
             
             // Video oynatıcıyı bul ve düzenle
             html = html.replace(/<video[^>]*>([\s\S]*?)<\/video>/gi, (match) => {
                 return match.replace(/controls(?=[\s>])/gi, 'controls playsinline');
+            });
+            
+            // İframe içeriğini düzenle
+            html = html.replace(/<iframe[^>]*>/gi, (match) => {
+                return match.replace(/sandbox="[^"]*"/gi, '')
+                    .replace(/>/g, ' sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation">');
             });
             
             return res.send(html);
