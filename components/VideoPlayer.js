@@ -15,6 +15,9 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
     const [ignoreStateChanges, setIgnoreStateChanges] = React.useState(false);
     const SYNC_THRESHOLD = 1; // 1 saniyelik senkronizasyon eşiği
     const SYNC_INTERVAL = 1000; // 1000ms kontrol aralığı
+    const [isPlaying, setIsPlaying] = React.useState(false);
+    const [currentTime, setCurrentTime] = React.useState(0);
+    const [totalDuration, setTotalDuration] = React.useState(0);
 
     // YouTube Player API için event handlers
     const onYouTubePlayerReady = React.useCallback((event) => {
@@ -106,99 +109,142 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         };
     }, [syncInterval]);
 
+    // Film sitesi için zaman güncellemesi
+    React.useEffect(() => {
+        if (videoType !== 'moviesite') return;
+        
+        // Varsayılan toplam süre (2 saat)
+        setTotalDuration(7200);
+        
+        // Zaman güncellemesi için interval
+        const timeUpdateInterval = setInterval(() => {
+            if (isPlaying) {
+                setCurrentTime(prevTime => {
+                    const newTime = prevTime + 1;
+                    return newTime > totalDuration ? totalDuration : newTime;
+                });
+            }
+        }, 1000);
+        
+        return () => {
+            clearInterval(timeUpdateInterval);
+        };
+    }, [videoType, isPlaying, totalDuration]);
+
     // Socket olaylarını dinle
     React.useEffect(() => {
         if (!socket) return;
 
         socket.on('videoPlay', (data) => {
-            if (!isCreator && youtubePlayerRef.current) {
-                console.log('Viewer: Received play at', data.currentTime);
-                try {
-                    setIgnoreStateChanges(true);
-                    const player = youtubePlayerRef.current;
-                    
-                    // Önce zaman senkronize et, sonra oynat
-                    player.seekTo(data.currentTime, true);
-                    
-                    // Kısa bir gecikme ile oynat
-                    setTimeout(() => {
-                        player.playVideo();
+            if (!isCreator) {
+                if (videoType === 'youtube' && youtubePlayerRef.current) {
+                    console.log('Viewer: Received play at', data.currentTime);
+                    try {
+                        setIgnoreStateChanges(true);
+                        const player = youtubePlayerRef.current;
                         
-                        // Durum değişikliklerini tekrar dinle
+                        // Önce zaman senkronize et, sonra oynat
+                        player.seekTo(data.currentTime, true);
+                        
+                        // Kısa bir gecikme ile oynat
                         setTimeout(() => {
-                            setIgnoreStateChanges(false);
-                        }, 1000);
-                    }, 200);
-                    
-                } catch (error) {
-                    console.error('Play failed:', error);
-                    setIgnoreStateChanges(false);
+                            player.playVideo();
+                            
+                            // Durum değişikliklerini tekrar dinle
+                            setTimeout(() => {
+                                setIgnoreStateChanges(false);
+                            }, 1000);
+                        }, 200);
+                        
+                    } catch (error) {
+                        console.error('Play failed:', error);
+                        setIgnoreStateChanges(false);
+                    }
+                } else if (videoType === 'moviesite') {
+                    // Film sitesi için senkronizasyon
+                    console.log('Viewer: Received play at', data.currentTime);
+                    setCurrentTime(data.currentTime);
+                    setIsPlaying(true);
                 }
             }
         });
 
         socket.on('videoPause', (data) => {
-            if (!isCreator && youtubePlayerRef.current) {
-                console.log('Viewer: Received pause at', data.currentTime);
-                try {
-                    setIgnoreStateChanges(true);
-                    const player = youtubePlayerRef.current;
-                    
-                    // Önce videoyu durdur
-                    player.pauseVideo();
-                    
-                    // Kısa bir gecikme ile zaman senkronize et
-                    setTimeout(() => {
-                        player.seekTo(data.currentTime, true);
+            if (!isCreator) {
+                if (videoType === 'youtube' && youtubePlayerRef.current) {
+                    console.log('Viewer: Received pause at', data.currentTime);
+                    try {
+                        setIgnoreStateChanges(true);
+                        const player = youtubePlayerRef.current;
                         
-                        // Durum değişikliklerini tekrar dinle
-                        setTimeout(() => {
-                            setIgnoreStateChanges(false);
-                        }, 500);
-                    }, 200);
-                    
-                } catch (error) {
-                    console.error('Pause failed:', error);
-                    setIgnoreStateChanges(false);
-                }
-            }
-        });
-
-        socket.on('videoSeek', (data) => {
-            if (!isCreator && youtubePlayerRef.current) {
-                console.log('Viewer: Received seek to', data.currentTime, 'isPlaying:', data.isPlaying);
-                try {
-                    setIsSeeking(true);
-                    setIgnoreStateChanges(true);
-                    const player = youtubePlayerRef.current;
-                    
-                    // Önce videoyu durdur
-                    player.pauseVideo();
-                    
-                    // Sonra zaman değiştir
-                    setTimeout(() => {
-                        player.seekTo(data.currentTime, true);
+                        // Önce videoyu durdur
+                        player.pauseVideo();
                         
-                        // Oynatma durumunu koru
+                        // Kısa bir gecikme ile zaman senkronize et
                         setTimeout(() => {
-                            if (data.isPlaying) {
-                                player.playVideo();
-                            }
-                            
-                            setIsSeeking(false);
-                            setLastUpdateTime(data.currentTime);
+                            player.seekTo(data.currentTime, true);
                             
                             // Durum değişikliklerini tekrar dinle
                             setTimeout(() => {
                                 setIgnoreStateChanges(false);
                             }, 500);
                         }, 200);
-                    }, 100);
-                    
-                } catch (error) {
-                    console.error('Seek failed:', error);
-                    setIsSeeking(false);
-                    setIgnoreStateChanges(false);
+                        
+                    } catch (error) {
+                        console.error('Pause failed:', error);
+                        setIgnoreStateChanges(false);
+                    }
+                } else if (videoType === 'moviesite') {
+                    // Film sitesi için senkronizasyon
+                    console.log('Viewer: Received pause at', data.currentTime);
+                    setCurrentTime(data.currentTime);
+                    setIsPlaying(false);
+                }
+            }
+        });
+
+        socket.on('videoSeek', (data) => {
+            if (!isCreator) {
+                if (videoType === 'youtube' && youtubePlayerRef.current) {
+                    console.log('Viewer: Received seek to', data.currentTime, 'isPlaying:', data.isPlaying);
+                    try {
+                        setIsSeeking(true);
+                        setIgnoreStateChanges(true);
+                        const player = youtubePlayerRef.current;
+                        
+                        // Önce videoyu durdur
+                        player.pauseVideo();
+                        
+                        // Sonra zaman değiştir
+                        setTimeout(() => {
+                            player.seekTo(data.currentTime, true);
+                            
+                            // Oynatma durumunu koru
+                            setTimeout(() => {
+                                if (data.isPlaying) {
+                                    player.playVideo();
+                                }
+                                
+                                setIsSeeking(false);
+                                setLastUpdateTime(data.currentTime);
+                                
+                                // Durum değişikliklerini tekrar dinle
+                                setTimeout(() => {
+                                    setIgnoreStateChanges(false);
+                                }, 500);
+                            }, 200);
+                        }, 100);
+                        
+                    } catch (error) {
+                        console.error('Seek failed:', error);
+                        setIsSeeking(false);
+                        setIgnoreStateChanges(false);
+                    }
+                } else if (videoType === 'moviesite') {
+                    // Film sitesi için senkronizasyon
+                    console.log('Viewer: Received seek to', data.currentTime, 'isPlaying:', data.isPlaying);
+                    setCurrentTime(data.currentTime);
+                    setIsPlaying(data.isPlaying);
                 }
             }
         });
@@ -465,85 +511,151 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         // Film sitesi embed desteği
         if (videoType === 'moviesite') {
             return (
-                <div className="w-full aspect-video relative bg-gray-800 text-white p-8">
-                    <div className="flex flex-col items-center justify-center h-full">
-                        <h3 className="text-2xl mb-4">Film Sitesi Modu</h3>
-                        
-                        <p className="mb-4 text-center">
-                            Film siteleri genellikle iframe içinde gösterilmeye izin vermez. 
-                            Aşağıdaki butona tıklayarak filmi yeni bir sekmede açabilirsiniz.
-                        </p>
-                        
-                        <div className="flex gap-4 mb-6">
-                            <a 
-                                href={videoUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center"
-                            >
-                                <i className="fas fa-external-link-alt mr-2"></i>
-                                Filmi Yeni Sekmede Aç
-                            </a>
+                <div className="w-full aspect-video relative">
+                    <div className="absolute inset-0 bg-black">
+                        <iframe
+                            src={videoUrl}
+                            className="w-full h-full"
+                            frameBorder="0"
+                            allowFullScreen
+                            allow="autoplay; encrypted-media; picture-in-picture"
+                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                            referrerPolicy="no-referrer"
+                            style={{ opacity: 0.01 }} // Neredeyse görünmez, ama hala aktif
+                        ></iframe>
+                    </div>
+                    
+                    {/* Proxy Video Player - Senkronizasyon için */}
+                    <div className="absolute inset-0 flex flex-col">
+                        <div className="flex-1 relative">
+                            {/* Video Görüntüsü Yerine Geçen Alan */}
+                            <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+                                <div className="text-center p-4">
+                                    <h3 className="text-2xl text-white mb-4">Film Sitesi Senkronizasyon Modu</h3>
+                                    <p className="text-gray-300 mb-4">
+                                        Film sitesi yeni bir sekmede açıldı. Bu ekrandaki kontrolleri kullanarak senkronize izleyebilirsiniz.
+                                    </p>
+                                    <a 
+                                        href={videoUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 inline-flex items-center mb-4"
+                                        onClick={() => {
+                                            // Film sitesini yeni sekmede aç
+                                            window.open(videoUrl, '_blank');
+                                        }}
+                                    >
+                                        <i className="fas fa-external-link-alt mr-2"></i>
+                                        Filmi Yeni Sekmede Aç
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div className="w-full max-w-md">
-                            <div className="bg-gray-700 p-4 rounded-lg mb-4">
-                                <h4 className="font-bold mb-2">Manuel Senkronizasyon</h4>
+                        {/* Video Kontrolleri */}
+                        <div className="bg-gray-800 p-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center">
+                                    {isPlaying ? (
+                                        <button 
+                                            onClick={() => {
+                                                if (isCreator && socket) {
+                                                    socket.emit('videoPause', {
+                                                        partyCode,
+                                                        currentTime: currentTime,
+                                                        timestamp: Date.now()
+                                                    });
+                                                }
+                                                setIsPlaying(false);
+                                            }}
+                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full mr-2"
+                                        >
+                                            <i className="fas fa-pause"></i>
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={() => {
+                                                if (isCreator && socket) {
+                                                    socket.emit('videoPlay', {
+                                                        partyCode,
+                                                        currentTime: currentTime,
+                                                        timestamp: Date.now()
+                                                    });
+                                                }
+                                                setIsPlaying(true);
+                                            }}
+                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full mr-2"
+                                        >
+                                            <i className="fas fa-play"></i>
+                                        </button>
+                                    )}
+                                    <span className="text-white">{formatTime(currentTime)}</span>
+                                </div>
                                 
-                                {isCreator ? (
-                                    <div>
-                                        <p className="mb-2">Parti yaratıcısı olarak, herkesin aynı noktada olmasını sağlamak için zaman damgası gönderebilirsiniz:</p>
-                                        <div className="flex gap-2">
-                                            <input 
-                                                type="text" 
-                                                placeholder="ör: 1:30:45"
-                                                className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white"
-                                                id="syncTimeInput"
-                                            />
-                                            <button 
-                                                onClick={() => {
-                                                    const timestamp = document.getElementById('syncTimeInput').value;
-                                                    if (timestamp) {
-                                                        // Zaman damgasını saniyeye çevir
-                                                        const parts = timestamp.split(':').map(Number);
-                                                        let seconds = 0;
-                                                        if (parts.length === 3) { // saat:dakika:saniye
-                                                            seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                                                        } else if (parts.length === 2) { // dakika:saniye
-                                                            seconds = parts[0] * 60 + parts[1];
-                                                        } else {
-                                                            seconds = parts[0];
-                                                        }
-                                                        
-                                                        // Zaman damgasını gönder
-                                                        socket.emit('manualSync', {
-                                                            partyCode,
-                                                            timestamp: seconds,
-                                                            message: `Film ${formatTime(seconds)} noktasına senkronize edildi.`
-                                                        });
-                                                        
-                                                        // Input'u temizle
-                                                        document.getElementById('syncTimeInput').value = '';
-                                                    }
-                                                }}
-                                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                                            >
-                                                <i className="fas fa-sync-alt mr-1"></i> Senkronize Et
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <p>Parti yaratıcısı, herkesin aynı noktada olmasını sağlamak için zaman damgası gönderecektir. Lütfen sohbeti takip edin.</p>
-                                )}
+                                <div className="flex items-center">
+                                    <input 
+                                        type="text" 
+                                        placeholder="ör: 1:30:45"
+                                        className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white mr-2 w-24"
+                                        id="syncTimeInput"
+                                    />
+                                    <button 
+                                        onClick={() => {
+                                            const timestamp = document.getElementById('syncTimeInput').value;
+                                            if (timestamp) {
+                                                // Zaman damgasını saniyeye çevir
+                                                const parts = timestamp.split(':').map(Number);
+                                                let seconds = 0;
+                                                if (parts.length === 3) { // saat:dakika:saniye
+                                                    seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                                                } else if (parts.length === 2) { // dakika:saniye
+                                                    seconds = parts[0] * 60 + parts[1];
+                                                } else {
+                                                    seconds = parts[0];
+                                                }
+                                                
+                                                // Zaman damgasını gönder
+                                                if (isCreator && socket) {
+                                                    socket.emit('videoSeek', {
+                                                        partyCode,
+                                                        currentTime: seconds,
+                                                        timestamp: Date.now(),
+                                                        isPlaying: isPlaying
+                                                    });
+                                                    
+                                                    // Ayrıca manuel senkronizasyon mesajı da gönder
+                                                    socket.emit('manualSync', {
+                                                        partyCode,
+                                                        timestamp: seconds,
+                                                        message: `Film ${formatTime(seconds)} noktasına senkronize edildi.`
+                                                    });
+                                                }
+                                                
+                                                setCurrentTime(seconds);
+                                                
+                                                // Input'u temizle
+                                                document.getElementById('syncTimeInput').value = '';
+                                            }
+                                        }}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                    >
+                                        <i className="fas fa-sync-alt mr-1"></i> Senkronize Et
+                                    </button>
+                                </div>
                             </div>
                             
-                            <div className="bg-yellow-800 bg-opacity-50 p-4 rounded-lg">
-                                <h4 className="font-bold mb-2">Öneriler:</h4>
-                                <ul className="list-disc ml-5">
-                                    <li>Filmi açtıktan sonra, parti yaratıcısının senkronizasyon mesajlarını bekleyin</li>
-                                    <li>Senkronizasyon mesajı geldiğinde, filmi belirtilen zamana getirin</li>
-                                    <li>Alternatif olarak, YouTube videoları tam senkronizasyon desteği sunar</li>
-                                </ul>
+                            {/* İlerleme Çubuğu */}
+                            <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+                                <div 
+                                    className="bg-blue-600 h-2 rounded-full" 
+                                    style={{ width: `${(currentTime / totalDuration) * 100}%` }}
+                                ></div>
+                            </div>
+                            
+                            {/* Zaman Kontrolleri */}
+                            <div className="flex justify-between text-gray-400 text-sm">
+                                <span>{formatTime(currentTime)}</span>
+                                <span>{formatTime(totalDuration)}</span>
                             </div>
                         </div>
                     </div>
