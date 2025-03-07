@@ -512,151 +512,120 @@ function VideoPlayer({ partyCode, isCreator, onVideoSelect, socket }) {
         if (videoType === 'moviesite') {
             return (
                 <div className="w-full aspect-video relative">
-                    <div className="absolute inset-0 bg-black">
-                        <iframe
-                            src={videoUrl}
-                            className="w-full h-full"
-                            frameBorder="0"
-                            allowFullScreen
-                            allow="autoplay; encrypted-media; picture-in-picture"
-                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-                            referrerPolicy="no-referrer"
-                            style={{ opacity: 0.01 }} // Neredeyse görünmez, ama hala aktif
-                        ></iframe>
-                    </div>
+                    <iframe
+                        src={`/proxy?url=${encodeURIComponent(videoUrl)}`}
+                        className="w-full h-full"
+                        frameBorder="0"
+                        allowFullScreen
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                        referrerPolicy="no-referrer"
+                    ></iframe>
                     
-                    {/* Proxy Video Player - Senkronizasyon için */}
-                    <div className="absolute inset-0 flex flex-col">
-                        <div className="flex-1 relative">
-                            {/* Video Görüntüsü Yerine Geçen Alan */}
-                            <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
-                                <div className="text-center p-4">
-                                    <h3 className="text-2xl text-white mb-4">Film Sitesi Senkronizasyon Modu</h3>
-                                    <p className="text-gray-300 mb-4">
-                                        Film sitesi yeni bir sekmede açıldı. Bu ekrandaki kontrolleri kullanarak senkronize izleyebilirsiniz.
-                                    </p>
-                                    <a 
-                                        href={videoUrl} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 inline-flex items-center mb-4"
+                    {/* Video Kontrolleri */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gray-800 bg-opacity-90 p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center">
+                                {isPlaying ? (
+                                    <button 
                                         onClick={() => {
-                                            // Film sitesini yeni sekmede aç
-                                            window.open(videoUrl, '_blank');
+                                            if (isCreator && socket) {
+                                                socket.emit('videoPause', {
+                                                    partyCode,
+                                                    currentTime: currentTime,
+                                                    timestamp: Date.now()
+                                                });
+                                            }
+                                            setIsPlaying(false);
                                         }}
+                                        className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full mr-2"
                                     >
-                                        <i className="fas fa-external-link-alt mr-2"></i>
-                                        Filmi Yeni Sekmede Aç
-                                    </a>
-                                </div>
+                                        <i className="fas fa-pause"></i>
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => {
+                                            if (isCreator && socket) {
+                                                socket.emit('videoPlay', {
+                                                    partyCode,
+                                                    currentTime: currentTime,
+                                                    timestamp: Date.now()
+                                                });
+                                            }
+                                            setIsPlaying(true);
+                                        }}
+                                        className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full mr-2"
+                                    >
+                                        <i className="fas fa-play"></i>
+                                    </button>
+                                )}
+                                <span className="text-white">{formatTime(currentTime)}</span>
+                            </div>
+                            
+                            <div className="flex items-center">
+                                <input 
+                                    type="text" 
+                                    placeholder="ör: 1:30:45"
+                                    className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white mr-2 w-24"
+                                    id="syncTimeInput"
+                                />
+                                <button 
+                                    onClick={() => {
+                                        const timestamp = document.getElementById('syncTimeInput').value;
+                                        if (timestamp) {
+                                            // Zaman damgasını saniyeye çevir
+                                            const parts = timestamp.split(':').map(Number);
+                                            let seconds = 0;
+                                            if (parts.length === 3) { // saat:dakika:saniye
+                                                seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                                            } else if (parts.length === 2) { // dakika:saniye
+                                                seconds = parts[0] * 60 + parts[1];
+                                            } else {
+                                                seconds = parts[0];
+                                            }
+                                            
+                                            // Zaman damgasını gönder
+                                            if (isCreator && socket) {
+                                                socket.emit('videoSeek', {
+                                                    partyCode,
+                                                    currentTime: seconds,
+                                                    timestamp: Date.now(),
+                                                    isPlaying: isPlaying
+                                                });
+                                                
+                                                // Ayrıca manuel senkronizasyon mesajı da gönder
+                                                socket.emit('manualSync', {
+                                                    partyCode,
+                                                    timestamp: seconds,
+                                                    message: `Film ${formatTime(seconds)} noktasına senkronize edildi.`
+                                                });
+                                            }
+                                            
+                                            setCurrentTime(seconds);
+                                            
+                                            // Input'u temizle
+                                            document.getElementById('syncTimeInput').value = '';
+                                        }
+                                    }}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                >
+                                    <i className="fas fa-sync-alt mr-1"></i> Senkronize Et
+                                </button>
                             </div>
                         </div>
                         
-                        {/* Video Kontrolleri */}
-                        <div className="bg-gray-800 p-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center">
-                                    {isPlaying ? (
-                                        <button 
-                                            onClick={() => {
-                                                if (isCreator && socket) {
-                                                    socket.emit('videoPause', {
-                                                        partyCode,
-                                                        currentTime: currentTime,
-                                                        timestamp: Date.now()
-                                                    });
-                                                }
-                                                setIsPlaying(false);
-                                            }}
-                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full mr-2"
-                                        >
-                                            <i className="fas fa-pause"></i>
-                                        </button>
-                                    ) : (
-                                        <button 
-                                            onClick={() => {
-                                                if (isCreator && socket) {
-                                                    socket.emit('videoPlay', {
-                                                        partyCode,
-                                                        currentTime: currentTime,
-                                                        timestamp: Date.now()
-                                                    });
-                                                }
-                                                setIsPlaying(true);
-                                            }}
-                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full mr-2"
-                                        >
-                                            <i className="fas fa-play"></i>
-                                        </button>
-                                    )}
-                                    <span className="text-white">{formatTime(currentTime)}</span>
-                                </div>
-                                
-                                <div className="flex items-center">
-                                    <input 
-                                        type="text" 
-                                        placeholder="ör: 1:30:45"
-                                        className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white mr-2 w-24"
-                                        id="syncTimeInput"
-                                    />
-                                    <button 
-                                        onClick={() => {
-                                            const timestamp = document.getElementById('syncTimeInput').value;
-                                            if (timestamp) {
-                                                // Zaman damgasını saniyeye çevir
-                                                const parts = timestamp.split(':').map(Number);
-                                                let seconds = 0;
-                                                if (parts.length === 3) { // saat:dakika:saniye
-                                                    seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                                                } else if (parts.length === 2) { // dakika:saniye
-                                                    seconds = parts[0] * 60 + parts[1];
-                                                } else {
-                                                    seconds = parts[0];
-                                                }
-                                                
-                                                // Zaman damgasını gönder
-                                                if (isCreator && socket) {
-                                                    socket.emit('videoSeek', {
-                                                        partyCode,
-                                                        currentTime: seconds,
-                                                        timestamp: Date.now(),
-                                                        isPlaying: isPlaying
-                                                    });
-                                                    
-                                                    // Ayrıca manuel senkronizasyon mesajı da gönder
-                                                    socket.emit('manualSync', {
-                                                        partyCode,
-                                                        timestamp: seconds,
-                                                        message: `Film ${formatTime(seconds)} noktasına senkronize edildi.`
-                                                    });
-                                                }
-                                                
-                                                setCurrentTime(seconds);
-                                                
-                                                // Input'u temizle
-                                                document.getElementById('syncTimeInput').value = '';
-                                            }
-                                        }}
-                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                                    >
-                                        <i className="fas fa-sync-alt mr-1"></i> Senkronize Et
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            {/* İlerleme Çubuğu */}
-                            <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
-                                <div 
-                                    className="bg-blue-600 h-2 rounded-full" 
-                                    style={{ width: `${(currentTime / totalDuration) * 100}%` }}
-                                ></div>
-                            </div>
-                            
-                            {/* Zaman Kontrolleri */}
-                            <div className="flex justify-between text-gray-400 text-sm">
-                                <span>{formatTime(currentTime)}</span>
-                                <span>{formatTime(totalDuration)}</span>
-                            </div>
+                        {/* İlerleme Çubuğu */}
+                        <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+                            <div 
+                                className="bg-blue-600 h-2 rounded-full" 
+                                style={{ width: `${(currentTime / totalDuration) * 100}%` }}
+                            ></div>
+                        </div>
+                        
+                        {/* Zaman Kontrolleri */}
+                        <div className="flex justify-between text-gray-400 text-sm">
+                            <span>{formatTime(currentTime)}</span>
+                            <span>{formatTime(totalDuration)}</span>
                         </div>
                     </div>
                 </div>
